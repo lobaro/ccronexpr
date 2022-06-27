@@ -57,6 +57,11 @@ typedef struct {
     uint8_t months[2];
 } cron_expr;
 
+/* Ideas for "special" letters (L and W):
+ * L for day of week in 8th bit, plus set weekday (only L == SUN, after all)
+ * L for day of month in 13th bit of months, offset as (minus) nth bit in day of month? Other values in there with 'L' are discouraged anyway
+ * W for day of month in 14th bit of months, day of month "normally"?
+ */
 /**
  * Parses specified cron expression.
  * 

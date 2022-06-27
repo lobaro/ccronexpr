@@ -823,6 +823,24 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
 }
 
 static void set_days(char* field, uint8_t* targ, int max, const char** error) {
+    /* WEEK: if field ends in 'L':
+     * only 'L'? replace with Saturday/Sunday
+     * day before 'L'? Last xday (mon,tue,...) of month
+     *
+     * if field is 'L-x': x days before last day of the week (better for month, maybe skip here?)
+     * RANGES DISCOURAGED
+     */
+    /* MONTH: if field ends in 'L':
+     * only 'L'? last day of the month
+     *
+     * if field is 'L-x': x days before last day of the month
+     * RANGES DISCOURAGED
+     *
+     * if field ends in 'W':
+     * 'W' after day? next weekday to that day in month
+     * 'LW'? Last weekday of the month
+     * NO RANGES ALLOWED
+     */
     if (1 == strlen(field) && '?' == field[0]) {
         field[0] = '*';
     }
