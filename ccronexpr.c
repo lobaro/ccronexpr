@@ -664,10 +664,8 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
         *error = "No H to replace in field";
         return field;
     }
-    else if (has_char(field+1, 'H')) {
-        *error = "Only 1 H at the beginning of the field allowed";
-        return NULL;
-    }
+    // Multiple Hs per field are ok, but they will all be replaced with the same value
+    // TODO: Maybe change that?
     if (!hash_seed) {
         *error = "Hash Seed not initialized";
         return NULL;
@@ -946,23 +944,22 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     }
 
     // Find Hs, init seed and replace them
-    // TODO: Add support for multiple Hs in field; replace them with the same number for now?
+    // TODO: If H is in a range with another number, determine boundaries?
     for (size_t i = 0; i < len; i++)
     {
-        char* has_h = strchr(fields[i], 'H');
         int local_max = 0;
-        if (has_h && !(strstr(fields[i], "THU")) ) { // No Thursday-H should be replaced; TODO: Let it still be used alongside THU
+        if (i > 3) {
+            char* oldfield = fields[i];
+            fields[i] = replace_ordinals(fields[i], i == 4 ? MONTHS_ARR : DAYS_ARR, i == 4 ? CRON_MONTHS_ARR_LEN : CRON_DAYS_ARR_LEN);
+            cronFree(oldfield);
+        }
+        char* has_h = strchr(fields[i], 'H');
+        if (has_h) {
             if ( *(has_h+1) == '/') { /* H before an iterator */
                 sscanf(has_h, "H/%2d", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
                 if (!local_max) { /* iterator might have been specified as an ordinal instead... */
-                    char* iterator_replaced = NULL;
-                    iterator_replaced = replace_ordinals(fields[i], i == 4 ? MONTHS_ARR : DAYS_ARR, i == 4 ? CRON_MONTHS_ARR_LEN : CRON_DAYS_ARR_LEN);
-                    sscanf(iterator_replaced, "H/%2d", &local_max);
-                    cronFree(iterator_replaced);
-                    if (!local_max) {
-                        *error = "Hashed: Iterator error";
-                        goto return_res;
-                    }
+                    *error = "Hashed: Iterator error";
+                    goto return_res;
                 }
             }
             switch (i) {
