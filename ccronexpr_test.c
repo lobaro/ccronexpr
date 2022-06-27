@@ -156,26 +156,9 @@ int two_dec_num(const char* first) {
 /* 0123456789012345678 */
 struct tm* poors_mans_strptime(const char* str) {
     struct tm* cal = (struct tm*) malloc(sizeof(struct tm));
-    switch (str[3]) {
-    case '7':
-        cal->tm_year = 107;
-        break;
-    case '8':
-        cal->tm_year = 108;
-        break;
-    case '9':
-        cal->tm_year = 109;
-        break;
-    case '0':
-        cal->tm_year = 110;
-        break;
-    case '1':
-        cal->tm_year = 111;
-        break;
-    case '2':
-        cal->tm_year = 112;
-        break;
-    }
+    int year;
+    sscanf(str, "%4d", &year);
+    cal->tm_year = year - 1900;
     cal->tm_mon = two_dec_num(str + 5) - 1;
     cal->tm_mday = two_dec_num(str + 8);
     cal->tm_wday = 0;

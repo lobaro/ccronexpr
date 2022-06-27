@@ -1,5 +1,6 @@
 /build/
 /nbproject
 /Makefile
-/cmake-file-debug/
+/cmake-build-debug/
 /CMakeLists.txt
+/.idea/
