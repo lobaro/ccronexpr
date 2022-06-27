@@ -174,6 +174,7 @@ void check_next(const char* pattern, const char* initial, const char* expected) 
     cron_expr parsed;
     memset(&parsed, 0, sizeof(parsed));
     cron_parse_expr(pattern, &parsed, &err);
+    if (err) printf("%s", err);
 
     struct tm* calinit = poors_mans_strptime(initial);
     time_t dateinit = timegm(calinit);
@@ -280,12 +281,14 @@ void test_expr() {
     check_next("0 30 23 30 1/3 ?",  "2011-01-30_23:30:00", "2011-04-30_23:30:00");
     check_next("0 30 23 30 1/3 ?",  "2011-04-30_23:30:00", "2011-07-30_23:30:00");
     // H Tests
-    // set first seed
-    check_next("H 0 1 * * ?", "2022-05-12_00:00:00", "2022-05-12_01:00:27"); // determine seconds
-    check_next("H H 1 * * ?", "2022-05-12_00:00:00", "2022-06-03_01:17:27"); // determine seconds (same as above) and minutes
-    check_next("0 H/10 1 * * ?", "2022-05-12_00:00:00", "2022-06-03_01:09:00"); // determine minutes (between 0 and 1ß)
-    // set second seed, to ensure H is a different value now
-    check_next("H 0 1 * * ?", "2022-05-12_00:00:00", "2022-06-03_01:00:27"); // determine seconds
+    init_hash(7);
+    check_next("H 0 1 * * ?", "2022-05-12_00:00:00", "2022-05-12_01:00:49"); // determine seconds
+    check_next("H H 1 * * ?", "2022-05-12_00:00:00", "2022-05-12_01:43:49"); // determine seconds (same as above) and minutes
+    check_next("0 H/10 1 * * ?", "2022-05-12_00:00:00", "2022-05-12_01:03:00"); // determine minutes (between 0 and 10)
+    check_next("0 0 1 1 H/MAY ?", "2022-05-12_00:00:00", "2022-07-01_01:00:00"); // determine month (between 0 and 12)
+    init_hash(42);
+    check_next("H 0 1 * * ?", "2022-05-12_00:00:00", "2022-05-12_01:00:54"); // determine seconds
+    // TODO: Tests for a custom hash function, maybe more tests in general
     // W Tests
     //check_next("0 0 1 4W * ?", "2022-05-12_00:00:00", "2022-06-03_01:00:00");
     //check_next("0 0 1 1W * ?", "2022-10-01_00:00:00", "2022-10-03_01:00:00");

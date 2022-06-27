@@ -632,6 +632,74 @@ static int has_char(char* str, char ch) {
     return 0;
 }
 
+static int hash_seed = 0;
+static custom_hash_fn fn = NULL;
+
+void init_hash(int seed)
+{
+    hash_seed = seed;
+}
+void init_custom_hash_fn(custom_hash_fn func)
+{
+    fn = func;
+}
+
+/**
+ * Replace H parameter with integer in proper range. If using an iterator, min/max have to be set to proper values before!
+ * @param field CRON field which needs a value for its 'H' (in string form)
+ * @param n Position of the field in the CRON string, from 0 - 5
+ * @param min Minimum value allowed in field/for replacement
+ * @param max Maximum value allowed in field/for replacement
+ * @param hashFn Custom random output function, if provided, will be used instead of rand(). Needs to return an integer and needs to accept the seed and index for deterministic behaviour for each field. Can be NULL.
+ * @param error Error string in which error descriptions will be stored, if they happen. Just needs to be a const char** pointer. (See usage of get_range)
+ * @return New char* with replaced H, to be used instead of field.
+ */
+static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsigned int max, custom_hash_fn hashFn, const char** error)
+{
+    int i = 0;
+    int value;
+    char *newField = NULL;
+
+    if (!has_char(field, 'H')) {
+        *error = "No H to replace in field";
+        return field;
+    }
+    else if (has_char(field+1, 'H')) {
+        *error = "Only 1 H at the beginning of the field allowed";
+        return NULL;
+    }
+    if (!hash_seed) {
+        *error = "Hash Seed not initialized";
+        return NULL;
+    }
+
+    // Generate random value
+    if (hashFn) {
+        value = hashFn(hash_seed, n);
+    }
+    else {
+        int newSeed = rand();
+        srand(hash_seed);
+        while (n >= i++) {
+            value = rand();
+        }
+        srand(newSeed);
+    }
+    // ensure value is below max...
+    value %= max-min;
+    // and above min
+    value += min;
+
+    // Create string
+    char value_str[3];
+    sprintf(value_str, "%d", value);
+    newField = str_replace(field, "H", value_str);
+
+    cronFree(field);
+    return newField;
+
+}
+
 static unsigned int* get_range(char* field, unsigned int min, unsigned int max, const char** error) {
 
     char** parts = NULL;
@@ -876,6 +944,54 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         *error = "Invalid number of fields, expression must consist of 6 fields";
         goto return_res;
     }
+
+    // Find Hs, init seed and replace them
+    // TODO: Add support for multiple Hs in field; replace them with the same number for now?
+    for (size_t i = 0; i < len; i++)
+    {
+        char* has_h = strchr(fields[i], 'H');
+        int local_max = 0;
+        if (has_h && !(strstr(fields[i], "THU")) ) { // No Thursday-H should be replaced; TODO: Let it still be used alongside THU
+            if ( *(has_h+1) == '/') { /* H before an iterator */
+                sscanf(has_h, "H/%2d", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
+                if (!local_max) { /* iterator might have been specified as an ordinal instead... */
+                    char* iterator_replaced = NULL;
+                    iterator_replaced = replace_ordinals(fields[i], i == 4 ? MONTHS_ARR : DAYS_ARR, i == 4 ? CRON_MONTHS_ARR_LEN : CRON_DAYS_ARR_LEN);
+                    sscanf(iterator_replaced, "H/%2d", &local_max);
+                    cronFree(iterator_replaced);
+                    if (!local_max) {
+                        *error = "Hashed: Iterator error";
+                        goto return_res;
+                    }
+                }
+            }
+            switch (i) {
+                case 0: // seconds; technically same case as minutes
+                    fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_SECONDS, fn, error);
+                    break;
+                case 1: // minutes
+                    fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_MINUTES, fn, error);
+                    break;
+                case 2: // hours
+                    fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_HOURS, fn, error);
+                    break;
+                case 3: // day of month
+                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_DAYS_OF_MONTH, fn, error);
+                    break;
+                case 4: // month
+                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
+                    break;
+                case 5: // day of week
+                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_DAYS_OF_WEEK, fn, error);
+                    break;
+                default:
+                    *error = "Too many fields! (Should have failed before loop already)";
+                    goto return_res;
+            }
+        }
+        if (*error) goto return_res;
+    }
+
     set_number_hits(fields[0], target->seconds, 0, 60, error);
     if (*error) goto return_res;
     set_number_hits(fields[1], target->minutes, 0, 60, error);
