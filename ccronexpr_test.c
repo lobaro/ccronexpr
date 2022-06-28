@@ -318,6 +318,7 @@ void test_expr() {
     custom_hash_fn custom_fn = fake_custom_hash_function;
     init_custom_hash_fn(custom_fn);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-18_04:58:34"); // 34 58 4 18 7 ?
+    init_custom_hash_fn(NULL);
     // W Tests
     //check_next("0 0 1 4W * ?",    "2022-05-12_00:00:00", "2022-06-03_01:00:00");
     //check_next("0 0 1 1W * ?",    "2022-10-01_00:00:00", "2022-10-03_01:00:00");

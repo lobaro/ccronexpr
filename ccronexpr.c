@@ -645,7 +645,7 @@ void init_custom_hash_fn(custom_hash_fn func)
 }
 
 /**
- * Replace H parameter with integer in proper range. If using an iterator, min/max have to be set to proper values before!
+ * Replace H parameter with integer in proper range. If using an iterator fielo, min/max have to be set to proper values before!
  * @param field CRON field which needs a value for its 'H' (in string form)
  * @param n Position of the field in the CRON string, from 0 - 5
  * @param min Minimum value allowed in field/for replacement
@@ -665,7 +665,7 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
         return field;
     }
     // Multiple Hs per field are ok, but they will all be replaced with the same value
-    // TODO: Maybe change that?
+    // Not changing that, since it would either eat up further field values or require a seed per field (original seed + field offset?)?
     if (!hash_seed) {
         *error = "Hash Seed not initialized";
         return NULL;
@@ -948,13 +948,17 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     for (size_t i = 0; i < len; i++)
     {
         int local_max = 0;
-        if (i > 3) {
-            char* oldfield = fields[i];
-            fields[i] = replace_ordinals(fields[i], i == 4 ? MONTHS_ARR : DAYS_ARR, i == 4 ? CRON_MONTHS_ARR_LEN : CRON_DAYS_ARR_LEN);
-            cronFree(oldfield);
-        }
         char* has_h = strchr(fields[i], 'H');
         if (has_h) {
+            if (i > 3) {
+                char* oldfield = fields[i];
+                fields[i] = replace_ordinals(fields[i], i == 4 ? MONTHS_ARR : DAYS_ARR, i == 4 ? CRON_MONTHS_ARR_LEN : CRON_DAYS_ARR_LEN);
+                cronFree(oldfield);
+                has_h = strchr(fields[i], 'H'); // Search for H again, since it might be gone if it was only an 'H' in 'THU'
+                if (!has_h) {
+                    continue; // no more 'H' in field? Skip replacement step then
+                }
+            }
             if ( *(has_h+1) == '/') { /* H before an iterator */
                 sscanf(has_h, "H/%2d", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
                 if (!local_max) { /* iterator might have been specified as an ordinal instead... */
