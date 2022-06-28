@@ -928,6 +928,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     size_t len = 0;
     char** fields = NULL;
     char* days_replaced = NULL;
+    char* w_check = NULL;
     if (!error) {
         error = &err_local;
     }
@@ -1008,6 +1009,13 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         /* Sunday can be represented as 0 or 7*/
         cron_setBit(target->days_of_week, 0);
         cron_delBit(target->days_of_week, 7);
+    }
+    // Days of month: Test for W, if there, set 16th bit in months
+    if ( (w_check = strchr(fields[3], 'W')) ) {
+        cron_setBit(target->months, 15);
+        *w_check = '\0'; // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
+                         // so only the day in front of W will be set
+                         // TODO: Ensure only 1 day is specified, and W day is not the last in a range or list of days
     }
     set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
