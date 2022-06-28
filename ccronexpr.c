@@ -159,6 +159,8 @@ static char* strdupl(const char* str, size_t len) {
     return res;
 }
 
+/// Return next set bit position of bits starting at from_index as integer, set notfound to 1 if none was found.
+/// Interval: [from_index:max[
 static unsigned int next_set_bit(uint8_t* bits, unsigned int max, unsigned int from_index, int* notfound) {
     unsigned int i;
     if (!bits) {
@@ -172,6 +174,11 @@ static unsigned int next_set_bit(uint8_t* bits, unsigned int max, unsigned int f
     return 0;
 }
 
+/// Set last unset entry in reset array to *fi* (*arr* is usually initialized with -1 as every entry)
+/// Example: push_to_fields_arr(array, CRON_CF_MINUTE)
+///     - if used on a completely "new" array, would set seconds to 2 (CRON_CF_MINUTE) and return
+///     - if used on an array with seconds set, would set minutes to 2 and return (usual)
+///     - [...]
 static void push_to_fields_arr(int* arr, int fi) {
     int i;
     if (!arr || -1 == fi) {
@@ -315,6 +322,16 @@ static int set_field(struct tm* calendar, int field, int val) {
 /**
  * Search the bits provided for the next set bit after the value provided,
  * and reset the calendar.
+ *
+ * @param bits The starting address of the searched field in the parsed cron expression.
+ * @param max Maximum value for field (for expression and calendar). (Bits in expression will only be checked up to this one)
+ * @param value Original value of field in calendar.
+ * @param calendar Pointer to calendar structure. Starting with the original date, its fields will be replaced with the next trigger time from seconds to year.
+ * @param field Integer showing which field is currently searched for, used to set/reset that field in calendar. TODO: Replace macros with enum
+ * @param nextField Integer showing which field is following the searched field, used to increment that field in calendar, if a roll-over happens. TODO: Replace macros with enum
+ * @param lower_orders Array marking which fields in calendar should be reset by [reset_all](#reset_all). Usually all lower calendar fields which are equal to
+ * @param res_out Pointer to error code output. (Will be checked by do_next().)
+ * @return Either next trigger value for or 0 if field could not be set in calendar or lower calendar fields could not be reset. (If failing, *res_out will be set to 1 as well.)
  */
 static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, unsigned int field, unsigned int nextField, int* lower_orders, int* res_out) {
     int notfound = 0;
@@ -361,6 +378,19 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
     return 0;
 }
 
+/**
+ * Find the next time at which the cron will be triggered.
+ * If successful, it will replace the start time in *calendar*.
+ *
+ * Principle from [cron_next](#cron_next):
+ * 1. Try to find matching seconds after start, if not found (in find_next()), raise minutes by one, reset seconds to 0 and start again.
+ * 2. Once matching seconds are found,
+ *
+ * @param expr The parsed cron expression.
+ * @param calendar The time after which the next cron trigger should be found. If successful (see return), will be replaced with the next trigger time.
+ * @param dot Year of the original time. If no trigger is found even 4 years in the future, an error code (-1) is returned.
+ * @return Error code: 0 on success, other values (e. g. -1) mean failure.
+ */
 static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     int i;
     int res = 0;
@@ -390,14 +420,14 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     second = calendar->tm_sec;
     update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE, empty_list, &res);
     if (0 != res) goto return_result;
-    if (second == update_second) {
+    if (second == update_second) { // Confusing: If second had c
         push_to_fields_arr(resets, CRON_CF_SECOND);
     }
 
     minute = calendar->tm_min;
     update_minute = find_next(expr->minutes, CRON_MAX_MINUTES, minute, calendar, CRON_CF_MINUTE, CRON_CF_HOUR_OF_DAY, resets, &res);
     if (0 != res) goto return_result;
-    if (minute == update_minute) {
+    if (minute == update_minute) { //
         push_to_fields_arr(resets, CRON_CF_MINUTE);
     } else {
         res = do_next(expr, calendar, dot);
@@ -1015,7 +1045,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         cron_setBit(target->months, 15);
         *w_check = '\0'; // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
                          // so only the day in front of W will be set
-                         // TODO: Ensure only 1 day is specified, and W day is not the last in a range or list of days
+    // TODO: Ensure only 1 day is specified, and W day is not the last in a range or list of days
     }
     set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
