@@ -359,17 +359,87 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
     return 0;
 }
 
-static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, int* resets, int* res_out) {
+static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t lw_flags, int* resets, int* res_out) {
     int err;
     unsigned int count = 0;
     unsigned int max = 366;
-    while ((!cron_getBit(days_of_month, day_of_month) || !cron_getBit(days_of_week, day_of_week)) && count++ < max) {
-        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+    if (lw_flags) { // Adapt finding of next day: W should be nearest weekday to set dom, with L last weekday of month; in dow last x-day (Friday, Saturday, ...) of month
+        // W in DOM
+        if (lw_flags & 1) {
+            if (lw_flags & (1 << 1)) {
+                // LW in DOM
+                ; // TODO
+            } else {
+                unsigned int startday = calendar->tm_mday;
+                unsigned int startmonth = calendar->tm_mon;
+                // Only W
+                // Check first which day is the "desired" day (xxW):
+                // - Is current day a Monday?
+                //   - If yes, is xx-day only one day before current day, or is it the 1st of month and current day the 3rd?
+                unsigned int desired_day = next_set_bit(days_of_month, CRON_MAX_DAYS_OF_MONTH, 0, res_out);
+                if (*res_out == 1) goto return_error;
+                if (calendar->tm_wday == 1 && \
+                        ( (calendar->tm_mday-desired_day == 1) ||  ( (desired_day==1) && (calendar->tm_mday==3) ) ) ) {
+                    // Great! The current day is the next trigger day and can be returned.
+                    ;
+                }
+                // else...
+                // Step forward until "desired" day
+                else {
+                    while ((!cron_getBit(days_of_month, day_of_month)) &&
+                           count++ < max) {
+                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
 
-        if (err) goto return_error;
-        day_of_month = calendar->tm_mday;
-        day_of_week = calendar->tm_wday;
-        reset_all(calendar, resets);
+                        if (err) goto return_error;
+                        day_of_month = calendar->tm_mday;
+                        day_of_week = calendar->tm_wday;
+                    }
+                    // Is it a weekday? If so, great! It can be returned directly, and the following condition will be irrelevant.
+                    // Otherwise...
+                    if (calendar->tm_wday == 6) { // SAT
+                        unsigned int oldmonth = calendar->tm_mon;
+                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1); // go to next friday
+                        if (err) goto return_error;
+
+                        if (oldmonth != calendar->tm_mon) { // Jumped into the previous month by accident...
+                            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH,
+                                               3); // ...so we have to go 3 days forward to get to the closest monday.
+                            if (err) goto return_error;
+                            if (oldmonth != calendar->tm_mon) goto return_error; // just in case
+
+                        }
+                        day_of_month = calendar->tm_mday;
+                    } else if (calendar->tm_wday == 0) { // SUN
+                        unsigned int oldmonth = calendar->tm_mon;
+                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1); // go to next monday
+                        if (err) goto return_error;
+
+                        if (oldmonth != calendar->tm_mon) { // Jumped into the previous month by accident...
+                            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH,
+                                               -3); // ...so we have to go 3 days backward to get to the closest friday.
+                            if (err) goto return_error;
+                            if (oldmonth != calendar->tm_mon) goto return_error; // just in case
+
+                        }
+                        day_of_month = calendar->tm_mday;
+                    }
+                    if ( (startday != day_of_month) && (startmonth != calendar->tm_mon) ) {
+                        reset_all(calendar, resets);
+                    }
+                }
+            }
+        }
+    }
+    else {
+        while ((!cron_getBit(days_of_month, day_of_month) || !cron_getBit(days_of_week, day_of_week)) &&
+               count++ < max) {
+            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+
+            if (err) goto return_error;
+            day_of_month = calendar->tm_mday;
+            day_of_week = calendar->tm_wday;
+            reset_all(calendar, resets);
+        }
     }
     return day_of_month;
 
@@ -420,7 +490,7 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     second = calendar->tm_sec;
     update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE, empty_list, &res);
     if (0 != res) goto return_result;
-    if (second == update_second) { // Confusing: If second had c
+    if (second == update_second) {
         push_to_fields_arr(resets, CRON_CF_SECOND);
     }
 
@@ -446,7 +516,19 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
 
     day_of_week = calendar->tm_wday;
     day_of_month = calendar->tm_mday;
-    update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week, day_of_week, resets, &res);
+    // L & W parameters
+    uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
+    if (cron_getBit(expr->months, 15)) { // W DOM bit
+        lw_flags |= (1 << 0);
+    }
+    if (cron_getBit(expr->months, 14)) { // L DOM bit
+        lw_flags |= (1 << 1);
+    }
+    if (cron_getBit(expr->days_of_week, 7)) { // W DOW bit
+        lw_flags |= (1 << 2);
+    }
+
+    update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week, day_of_week, lw_flags, resets, &res);
     if (0 != res) goto return_result;
     if (day_of_month == update_day_of_month) {
         push_to_fields_arr(resets, CRON_CF_DAY_OF_MONTH);
@@ -1008,7 +1090,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
                     fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_HOURS, fn, error);
                     break;
                 case 3: // day of month
-                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_DAYS_OF_MONTH, fn, error);
+                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_DAYS_OF_MONTH, fn, error); // TODO: Maybe limit to 28? So it will be executed on every month
                     break;
                 case 4: // month
                     fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
