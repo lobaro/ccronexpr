@@ -453,7 +453,30 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
         break;
         case 2: {
             // L in DOM
-            // TODO
+            unsigned int startday = calendar->tm_mday;
+            unsigned int startmonth = calendar->tm_mon;
+
+            while ( startmonth == calendar->tm_mon ) {
+                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+
+                if (err) {
+                    *res_out = 1;
+                    return 0;
+                }
+                day_of_month = calendar->tm_mday;
+            }
+            // Finally, go back to the end of starting month
+            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
+
+            if (err) {
+                *res_out = 1;
+                return 0;
+            }
+            day_of_month = calendar->tm_mday;
+
+            if ( (startday != day_of_month) && (startmonth != calendar->tm_mon) ) {
+                reset_all(calendar, resets);
+            }
         }
         break;
         // no default case, if different bits are set this shouldn't deal with it
@@ -1080,6 +1103,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     char** fields = NULL;
     char* days_replaced = NULL;
     char* w_check = NULL;
+    char* s_check = NULL;
     if (!error) {
         error = &err_local;
     }
@@ -1164,12 +1188,26 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     if ( (w_check = strchr(fields[3], 'W')) ) {
         // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
         if ( has_char(fields[3], ',') || has_char(fields[3], '/') || has_char(fields[3], '-')) {
-            *error = "W only allowed in combination with one day or L in \"day of month\" field";
+            *error = "W only allowed in combination with one day or after L in \"day of month\" field";
             goto return_res;
         }
         cron_setBit(target->months, 15);
         *w_check = '\0'; // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
                          // so only the day in front of W will be set
+    }
+    // Days of month: Test for L, if there, set 15th bit in months
+    if ( (s_check = strchr(fields[3], 'L')) ) {
+        // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
+        if ( has_char(fields[3], ',') || has_char(fields[3], '/') ) {
+            *error = "L only allowed in combination with an offset or before W in \"day of month\" field";
+            goto return_res;
+        }
+        cron_setBit(target->months, 14);
+        *s_check = '\0';
+        // avoid an empty dom field when string is 'LW'
+        if (strlen(fields[3]) == 0) {
+            *fields[3] = '*';
+        }
     }
     set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
