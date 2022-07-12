@@ -1057,7 +1057,6 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     }
 
     // Find Hs, init seed and replace them
-    // TODO: If H is in a range with another number, determine boundaries?
     for (size_t i = 0; i < len; i++)
     {
         int local_max = 0;
@@ -1090,7 +1089,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
                     fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_HOURS, fn, error);
                     break;
                 case 3: // day of month
-                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_DAYS_OF_MONTH, fn, error); // TODO: Maybe limit to 28? So it will be executed on every month
+                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : 28, fn, error); // limited to 28th so the hashed cron will be executed every month
                     break;
                 case 4: // month
                     fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
@@ -1124,10 +1123,14 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     }
     // Days of month: Test for W, if there, set 16th bit in months
     if ( (w_check = strchr(fields[3], 'W')) ) {
+        // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
+        if ( has_char(fields[3], ',') || has_char(fields[3], '/') || has_char(fields[3], '-')) {
+            *error = "W only allowed in combination with one day or L in \"day of month\" field";
+            goto return_res;
+        }
         cron_setBit(target->months, 15);
         *w_check = '\0'; // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
                          // so only the day in front of W will be set
-    // TODO: Ensure only 1 day is specified, and W day is not the last in a range or list of days
     }
     set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
