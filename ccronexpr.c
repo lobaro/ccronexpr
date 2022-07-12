@@ -267,7 +267,13 @@ static int reset(struct tm* calendar, int field) {
     }
     return 0;
 }
-
+/**
+ * Reset fields in calendar to 0/1, provided their field entry is not -1.
+ *
+ * @param calendar Pointer to a struct tm; it's fields will be reset to 0/1, if the corresponding field entry is not -1, but it's CRON_CF_value.
+ * @param fields Array of CRON_CF_ARRAY_LEN; each entry is either -1 (no reset) or its position in the field, so it will reset its corresponding field in calendar.
+ * @return 1 if a reset failse, 0 if successful.
+ */
 static int reset_all(struct tm* calendar, int* fields) {
     int i;
     int res = 0;
@@ -358,77 +364,110 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
     *res_out = 1;
     return 0;
 }
+/**
+ * Set the next appropriate day of month on which the cron could trigger.
+ * @param calendar Pointer to a struct tm, which holds the
+ * @param days_of_month Pointer to parsed day of month field from the cron expression
+ * @param day_of_month Day of month from which the do_next function started. (Should be equal to calendar->tm_mday on function call and exit.)
+ * @param day_of_week Weekday from which the do_next function started. (Should be equal to calendar->tm_wday on function call and exit.)
+ * @param lw_flags Set LW flags: Is L, W or are both present
+ * @param resets Array which specifies which fields need to be reset, if the appropriate day of month is different from the start date.
+ * @param res_out Integer pointer for passing out error values
+ * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
+ */
+static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, unsigned int day_of_week, uint8_t lw_flags, int* resets, int* res_out)
+{
+    int err;
+    unsigned int count = 0;
+    const unsigned int max = 366;
+
+    switch (lw_flags) {
+        case 3: {
+            // LW in DOM
+            ; // TODO
+        }
+        break;
+        case 1: {
+            // W in DOM
+            unsigned int startday = calendar->tm_mday;
+            unsigned int startmonth = calendar->tm_mon;
+
+            // Check first which day is the "desired" day (xxW):
+            // - Is current day a Monday?
+            //   - If yes, is desired day only one day before current day, or is it the 1st of month and current day the 3rd?
+            unsigned int desired_day = next_set_bit(days_of_month, CRON_MAX_DAYS_OF_MONTH, 0, res_out);
+            if (*res_out == 1) return 0;
+            if  ( calendar->tm_wday == 1 && \
+                ( (calendar->tm_mday-desired_day == 1) ||  ( (desired_day==1) && (calendar->tm_mday==3) ) ) ) {
+                // Great! The current day is the next trigger day and can be returned.
+                ;
+            }
+            // else...
+            // Step forward until "desired" day
+            else {
+                while ((!cron_getBit(days_of_month, day_of_month)) &&
+                       count++ < max) {
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    day_of_month = calendar->tm_mday;
+                    day_of_week = calendar->tm_wday;
+                }
+                // Is it a weekday? If so, great! It can be returned directly, and the following condition will be irrelevant.
+
+                // Otherwise...
+                if (calendar->tm_wday == 6 || !calendar->tm_wday) { // SAT or SUN
+                    int sign = ( calendar->tm_wday ? 1 : -1);
+                    // If SAT: Try to go 1 day back, if accidentally in previous month, go 3 days forward (to MON)
+                    // If SUN: Inverted (1 day forward, if in next month, 3 days back)
+                    unsigned int oldmonth = calendar->tm_mon;
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1*sign); // go to next friday
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+
+                    if (oldmonth != calendar->tm_mon) { // Jumped into the previous month by accident...
+                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 3*sign); // ...so we have to go 3 days forward to get to the closest monday.
+                        if (err) {
+                            *res_out = 1;
+                            return 0;
+                        }
+                        if (oldmonth != calendar->tm_mon) {
+                            *res_out = 1;
+                            return 0;
+                        } // just in case
+
+                    }
+                    day_of_month = calendar->tm_mday;
+                }
+                // Finally, check if the planned date has moved in comparison to the start. If so, reset appropriate calendar fields for recalculation
+                if ( (startday != day_of_month) && (startmonth != calendar->tm_mon) ) {
+                    reset_all(calendar, resets);
+                }
+            }
+        }
+        break;
+        case 2: {
+            // L in DOM
+            // TODO
+        }
+        break;
+        // no default case, if different bits are set this shouldn't deal with it
+    }
+    return day_of_month;
+}
 
 static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t lw_flags, int* resets, int* res_out) {
     int err;
     unsigned int count = 0;
-    unsigned int max = 366;
+    const unsigned int max = 366;
     if (lw_flags) { // Adapt finding of next day: W should be nearest weekday to set dom, with L last weekday of month; in dow last x-day (Friday, Saturday, ...) of month
-        // W in DOM
-        if (lw_flags & 1) {
-            if (lw_flags & (1 << 1)) {
-                // LW in DOM
-                ; // TODO
-            } else {
-                unsigned int startday = calendar->tm_mday;
-                unsigned int startmonth = calendar->tm_mon;
-                // Only W
-                // Check first which day is the "desired" day (xxW):
-                // - Is current day a Monday?
-                //   - If yes, is xx-day only one day before current day, or is it the 1st of month and current day the 3rd?
-                unsigned int desired_day = next_set_bit(days_of_month, CRON_MAX_DAYS_OF_MONTH, 0, res_out);
-                if (*res_out == 1) goto return_error;
-                if (calendar->tm_wday == 1 && \
-                        ( (calendar->tm_mday-desired_day == 1) ||  ( (desired_day==1) && (calendar->tm_mday==3) ) ) ) {
-                    // Great! The current day is the next trigger day and can be returned.
-                    ;
-                }
-                // else...
-                // Step forward until "desired" day
-                else {
-                    while ((!cron_getBit(days_of_month, day_of_month)) &&
-                           count++ < max) {
-                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-                        if (err) goto return_error;
-                        day_of_month = calendar->tm_mday;
-                        day_of_week = calendar->tm_wday;
-                    }
-                    // Is it a weekday? If so, great! It can be returned directly, and the following condition will be irrelevant.
-                    // Otherwise...
-                    if (calendar->tm_wday == 6) { // SAT
-                        unsigned int oldmonth = calendar->tm_mon;
-                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1); // go to next friday
-                        if (err) goto return_error;
-
-                        if (oldmonth != calendar->tm_mon) { // Jumped into the previous month by accident...
-                            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH,
-                                               3); // ...so we have to go 3 days forward to get to the closest monday.
-                            if (err) goto return_error;
-                            if (oldmonth != calendar->tm_mon) goto return_error; // just in case
-
-                        }
-                        day_of_month = calendar->tm_mday;
-                    } else if (calendar->tm_wday == 0) { // SUN
-                        unsigned int oldmonth = calendar->tm_mon;
-                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1); // go to next monday
-                        if (err) goto return_error;
-
-                        if (oldmonth != calendar->tm_mon) { // Jumped into the previous month by accident...
-                            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH,
-                                               -3); // ...so we have to go 3 days backward to get to the closest friday.
-                            if (err) goto return_error;
-                            if (oldmonth != calendar->tm_mon) goto return_error; // just in case
-
-                        }
-                        day_of_month = calendar->tm_mday;
-                    }
-                    if ( (startday != day_of_month) && (startmonth != calendar->tm_mon) ) {
-                        reset_all(calendar, resets);
-                    }
-                }
-            }
-        }
+        day_of_month = handle_lw_flags(calendar, days_of_month, day_of_month, day_of_week, lw_flags, resets, res_out);
+        if (*res_out) goto return_error;
     }
     else {
         while ((!cron_getBit(days_of_month, day_of_month) || !cron_getBit(days_of_week, day_of_week)) &&
