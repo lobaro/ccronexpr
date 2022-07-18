@@ -1191,12 +1191,22 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
             *error = "W only allowed in combination with one day or after L in \"day of month\" field";
             goto return_res;
         }
+        // Ensure nothing follows 'W'
+        if (*(w_check+1) != '\0') {
+            *error = "If W is used, \"day of month\" field needs to end with it";
+            goto return_res;
+        }
         cron_setBit(target->months, 15);
         *w_check = '\0'; // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
                          // so only the day in front of W will be set
     }
     // Days of month: Test for L, if there, set 15th bit in months
     if ( (s_check = strchr(fields[3], 'L')) ) {
+        // Ensure nothing is in field before L
+        if (s_check != fields[3]) {
+            *error = "L only allowed as first and only option (with an offset) in \"day of month\" field";
+            goto return_res;
+        }
         // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
         if ( has_char(fields[3], ',') || has_char(fields[3], '/') ) {
             *error = "L only allowed in combination with an offset or before W in \"day of month\" field";

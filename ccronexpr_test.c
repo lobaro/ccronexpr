@@ -338,6 +338,7 @@ void test_expr() {
     check_next("0 0 1 26W * ?",     "2022-06-27_00:00:00", "2022-06-27_01:00:00");
     check_next("H 0 1 26W * ?",     "2022-06-27_00:00:00", "2022-06-27_01:00:27");
     check_next("H 0 1 26W */H ?",   "2022-06-27_02:00:00", "2022-09-26_01:00:27");
+    check_next("H 0 1 HW */H ?",    "2022-06-27_02:00:00", "2022-09-12_01:00:27");
     // L Tests
     //check_next("0 0 1 LW * ?",    "2022-06-22_00:00:00", "2022-06-30_01:00:00");
     //check_next("0 0 1 LW * ?",    "2022-07-01_00:00:00", "2022-07-29_01:00:00");
@@ -380,7 +381,9 @@ void test_parse() {
     check_expr_invalid("0 0 1 1-3W * ?");
     check_expr_invalid("0 0 1 1/3W * ?");
     check_expr_invalid("0 0 1 1W/3 * ?");
-    //check_expr_invalid("0 0 1 16WL * ?");
+    check_expr_invalid("0 0 1 16WL * ?");
+    check_expr_invalid("0 0 1 16LW * ?");
+    check_expr_invalid("0 0 1 WL * ?");
 }
 
 void test_bits() {
