@@ -159,8 +159,9 @@ static char* strdupl(const char* str, size_t len) {
     return res;
 }
 
-/// Return next set bit position of bits starting at from_index as integer, set notfound to 1 if none was found.
-/// Interval: [from_index:max[
+/** Return next set bit position of bits starting at from_index as integer, set notfound to 1 if none was found.
+ *  Interval: [from_index:max[
+ */
 static unsigned int next_set_bit(uint8_t* bits, unsigned int max, unsigned int from_index, int* notfound) {
     unsigned int i;
     if (!bits) {
@@ -267,12 +268,13 @@ static int reset(struct tm* calendar, int field) {
     }
     return 0;
 }
+
 /**
- * Reset fields in calendar to 0/1, provided their field entry is not -1.
+ * Reset fields in calendar to 0/1 (if day of month), provided their field entry is not -1.
  *
  * @param calendar Pointer to a struct tm; it's fields will be reset to 0/1, if the corresponding field entry is not -1, but it's CRON_CF_value.
  * @param fields Array of CRON_CF_ARRAY_LEN; each entry is either -1 (no reset) or its position in the field, so it will reset its corresponding field in calendar.
- * @return 1 if a reset failse, 0 if successful.
+ * @return 1 if a reset fails, 0 if successful.
  */
 static int reset_all(struct tm* calendar, int* fields) {
     int i;
@@ -364,6 +366,7 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
     *res_out = 1;
     return 0;
 }
+
 /**
  * Set the next appropriate day of month on which the cron could trigger.
  * @param calendar Pointer to a struct tm, which holds the
@@ -381,16 +384,74 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
     unsigned int count = 0;
     const unsigned int max = 366;
 
+    unsigned int startday = calendar->tm_mday;
+    unsigned int startmonth = calendar->tm_mon;
+
     switch (lw_flags) {
         case 3: {
             // LW in DOM
-            ; // TODO
+            // Special case: If already past the last weekday of the month, roll over into the next month
+            // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
+
+            // Find last day in current month
+            while (1)
+            {
+                unsigned int currentmonth = calendar->tm_mon;
+                while (currentmonth == calendar->tm_mon) {
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    day_of_month = calendar->tm_mday;
+                }
+                // Finally, go back to the end of starting month
+                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
+
+                if (err) {
+                    *res_out = 1;
+                    return 0;
+                }
+                day_of_month = calendar->tm_mday;
+
+                // Since the next weekday is found from the last day, it has to be behind the current day_of_month
+                if (calendar->tm_wday == 6) {
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
+
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    day_of_month = calendar->tm_mday;
+                } else if (calendar->tm_wday == 0) {
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -2);
+
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    day_of_month = calendar->tm_mday;
+                }
+                // Verify assumed trigger day is not behind startday
+                if ( (startmonth == calendar->tm_mon) && (startday > day_of_month) ) {
+                    // Startmonth hasn't changed, but trigger day is before initial day
+                    reset_all(calendar, resets);
+                    while (calendar->tm_mon - startmonth == 0) {
+                        // Roll over into next month
+                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+
+                        if (err) {
+                            *res_out = 1;
+                            return 0;
+                        }
+                    }
+                } else break;
+            }
         }
         break;
         case 1: {
             // W in DOM
-            unsigned int startday = calendar->tm_mday;
-            unsigned int startmonth = calendar->tm_mon;
 
             // Check first which day is the "desired" day (xxW):
             // - Is current day a Monday?
@@ -444,17 +505,11 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
                     }
                     day_of_month = calendar->tm_mday;
                 }
-                // Finally, check if the planned date has moved in comparison to the start. If so, reset appropriate calendar fields for recalculation
-                if ( (startday != day_of_month) && (startmonth != calendar->tm_mon) ) {
-                    reset_all(calendar, resets);
-                }
             }
         }
         break;
         case 2: {
             // L in DOM
-            unsigned int startday = calendar->tm_mday;
-            unsigned int startmonth = calendar->tm_mon;
 
             while ( startmonth == calendar->tm_mon ) {
                 err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
@@ -473,13 +528,13 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
                 return 0;
             }
             day_of_month = calendar->tm_mday;
-
-            if ( (startday != day_of_month) && (startmonth != calendar->tm_mon) ) {
-                reset_all(calendar, resets);
-            }
         }
         break;
         // no default case, if different bits are set this shouldn't deal with it
+    }
+    // Finally, check if the planned date has moved in comparison to the start. If so, reset appropriate calendar fields for recalculation
+    if ( (startday != day_of_month) || (startmonth != calendar->tm_mon) ) {
+        reset_all(calendar, resets);
     }
     return day_of_month;
 }
@@ -550,6 +605,7 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     }
 
     second = calendar->tm_sec;
+    minute = calendar->tm_min;
     update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE, empty_list, &res);
     if (0 != res) goto return_result;
     if (second == update_second) {
@@ -578,6 +634,7 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
 
     day_of_week = calendar->tm_wday;
     day_of_month = calendar->tm_mday;
+    month = calendar->tm_mon;
     // L & W parameters
     uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
     if (cron_getBit(expr->months, 15)) { // W DOM bit
@@ -586,13 +643,10 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     if (cron_getBit(expr->months, 14)) { // L DOM bit
         lw_flags |= (1 << 1);
     }
-    if (cron_getBit(expr->days_of_week, 7)) { // W DOW bit
-        lw_flags |= (1 << 2);
-    }
 
     update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week, day_of_week, lw_flags, resets, &res);
     if (0 != res) goto return_result;
-    if (day_of_month == update_day_of_month) {
+    if (day_of_month == update_day_of_month && month == calendar->tm_mon) {
         push_to_fields_arr(resets, CRON_CF_DAY_OF_MONTH);
     } else {
         res = do_next(expr, calendar, dot);
