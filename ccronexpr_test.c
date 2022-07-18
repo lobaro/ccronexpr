@@ -351,9 +351,9 @@ void test_expr() {
     check_next("0 0 1 L * ?",     "2022-05-12_00:00:00", "2022-05-31_01:00:00");
     check_next("0 0 1 L * ?",     "2022-02-12_00:00:00", "2022-02-28_01:00:00");
     check_next("0 0 1 L * ?",     "2020-02-12_00:00:00", "2020-02-29_01:00:00");
-    //check_next("0 0 1 ? * L",     "2022-05-12_00:00:00", "2022-05-15_01:00:00");
+    check_next("0 0 1 ? * L",     "2022-05-12_00:00:00", "2022-05-15_01:00:00");
+    check_next("0 0 1 ? * 4L",    "2022-05-12_00:00:00", "2022-05-26_01:00:00");
     //check_next("0 0 1 L-2 * ?",   "2022-05-12_00:00:00", "2022-05-29_01:00:00");
-    //check_next("0 0 1 ? * 4L",    "2022-05-12_00:00:00", "2022-05-26_01:00:00");
 }
 
 void test_parse() {
@@ -368,7 +368,7 @@ void test_parse() {
     check_same("* * * * 1-12 *", "* * * * FEB,JAN,MAR,APR,MAY,JUN,JUL,AUG,SEP,OCT,NOV,DEC *");
     check_same("* * * * 2 *", "* * * * Feb *");
     check_same("*  *  * *  1 *", "* * * * 1 *");
-    //check_same("* * * * 1 L", "* * * * 1 SUN");
+    check_same("* * * * 1 L", "* * * * 1 SUN");
 
     check_expr_invalid("77 * * * * *");
     check_expr_invalid("44-77 * * * * *");
@@ -389,7 +389,14 @@ void test_parse() {
     check_expr_invalid("0 0 1 16WL * ?");
     check_expr_invalid("0 0 1 16LW * ?");
     check_expr_invalid("0 0 1 WL * ?");
+    check_expr_invalid("0 0 1 10L * ?");
+    check_expr_invalid("0 0 1 L/7 * ?");
     check_expr_invalid("0 0 1 HLW * ?");
+    check_expr_invalid("0 0 1 ? * 5L,SUN");
+    check_expr_invalid("0 0 1 ? * 19L");
+    check_expr_invalid("0 0 1 17 * 5L");
+    check_expr_invalid("0 0 1 ? * L-7");
+    check_expr_invalid("0 0 1 ? * 5L-7");
 }
 
 void test_bits() {
