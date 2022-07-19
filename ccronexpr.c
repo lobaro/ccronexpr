@@ -335,8 +335,8 @@ static int set_field(struct tm* calendar, int field, int val) {
  * @param max Maximum value for field (for expression and calendar). (Bits in expression will only be checked up to this one)
  * @param value Original value of field in calendar.
  * @param calendar Pointer to calendar structure. Starting with the original date, its fields will be replaced with the next trigger time from seconds to year.
- * @param field Integer showing which field is currently searched for, used to set/reset that field in calendar. TODO: Replace macros with enum
- * @param nextField Integer showing which field is following the searched field, used to increment that field in calendar, if a roll-over happens. TODO: Replace macros with enum
+ * @param field Integer showing which field is currently searched for, used to set/reset that field in calendar.
+ * @param nextField Integer showing which field is following the searched field, used to increment that field in calendar, if a roll-over happens.
  * @param lower_orders Array marking which fields in calendar should be reset by [reset_all](#reset_all). Usually all lower calendar fields which are equal to
  * @param res_out Pointer to error code output. (Will be checked by do_next().)
  * @return Either next trigger value for or 0 if field could not be set in calendar or lower calendar fields could not be reset. (If failing, *res_out will be set to 1 as well.)
@@ -565,26 +565,73 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
         case 2: {
             // L in DOM
 
-            while ( startmonth == calendar->tm_mon ) {
-                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+            int currentmonth = startmonth;
+            unsigned int offset;
+            uint8_t offset_mask[4];
+
+            for (int i = 0; i < 4; i++) {
+                memset(&(offset_mask[i]), ~(*(days_of_month+i)), 1);
+            }
+
+            while (1)
+            {
+                while (currentmonth == calendar->tm_mon) {
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                }
+                // Finally, go back to the end of starting month
+                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
 
                 if (err) {
                     *res_out = 1;
                     return 0;
                 }
-                day_of_month = calendar->tm_mday;
-            }
-            // Finally, go back to the end of starting month
-            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
 
-            if (err) {
-                *res_out = 1;
-                return 0;
+                // If offset is set, go back offset days from end of month
+                if ((offset = next_set_bit(offset_mask, CRON_MAX_DAYS_OF_MONTH, 1, &err))) {
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -offset);
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    if (currentmonth != calendar->tm_mon) {
+                        // Ended up in previous month? Go back to last day of current month, roll over and re-apply offset
+                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, offset + 1);
+                        if (err) {
+                            *res_out = 1;
+                            return 0;
+                        }
+                        currentmonth = calendar->tm_mon;
+                        continue;
+                    }
+                }
+                // Check current trigger date is after startdate, otherwise roll over into next month and start again
+                if (calendar->tm_mon == startmonth && calendar->tm_mday < startday) {
+                    while (currentmonth == calendar->tm_mon) {
+                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+                        if (err) {
+                            *res_out = 1;
+                            return 0;
+                        }
+                    }
+                    currentmonth = calendar->tm_mon;
+                    continue;
+                }
+                day_of_month = calendar->tm_mday;
+                break;
             }
-            day_of_month = calendar->tm_mday;
         }
         break;
-        // no default case, if different bits are set this shouldn't deal with it
+        default: {
+            // if different bits are set this shouldn't deal with it
+            *res_out = 1;
+            return 0;
+        }
+        break;
     }
     // Finally, check if the planned date has moved in comparison to the start. If so, reset appropriate calendar fields for recalculation
     if ( (startday != day_of_month) || (startmonth != calendar->tm_mon) ) {
@@ -696,7 +743,7 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     if (cron_getBit(expr->months, 14)) { // L DOM bit
         lw_flags |= (1 << 1);
     }
-    if (cron_getBit(expr->months, 13)) { // W DOW bit
+    if (cron_getBit(expr->months, 13)) { // L DOW bit
         lw_flags |= (1 << 2);
     }
 
@@ -1148,6 +1195,45 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 
 }
 
+static char* h_finder(char* field, unsigned int pos, unsigned int min, const char** error)
+{
+    unsigned int local_max = 0;
+    char* has_h = strchr(field, 'H');
+    if (has_h) {
+        if ( *(has_h+1) == '/') { /* H before an iterator */
+            sscanf(has_h, "H/%2d", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
+            if (!local_max) { /* iterator might have been specified as an ordinal instead... */
+                *error = "Hashed: Iterator error";
+                return NULL;
+            }
+        }
+        switch (pos) {
+            case 0: // seconds; technically same case as minutes
+                field = replace_hashed(field, pos, 0, local_max ? local_max : CRON_MAX_SECONDS, fn, error);
+                break;
+            case 1: // minutes
+                field = replace_hashed(field, pos, 0, local_max ? local_max : CRON_MAX_MINUTES, fn, error);
+                break;
+            case 2: // hours
+                field = replace_hashed(field, pos, 0, local_max ? local_max : CRON_MAX_HOURS, fn, error);
+                break;
+            case 3: // day of month
+                field = replace_hashed(field, pos, 1, local_max ? local_max : 28, fn, error); // limited to 28th so the hashed cron will be executed every month
+                break;
+            case 4: // month
+                field = replace_hashed(field, pos, 1, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
+                break;
+            case 5: // day of week
+                field = replace_hashed(field, pos, 1, local_max ? local_max : CRON_MAX_DAYS_OF_WEEK, fn, error);
+                break;
+            default:
+                *error = "Unknown field!";
+                return NULL;
+        }
+    }
+    return field;
+}
+
 static void set_months(char* value, uint8_t* targ, const char** error) {
     int err;
     unsigned int i;
@@ -1159,6 +1245,11 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
     if (err) return;
     replaced = replace_ordinals(value, MONTHS_ARR, CRON_MONTHS_ARR_LEN);
     if (!replaced) return;
+    replaced = h_finder(replaced, 4, 1, error);
+    if (*error) {
+        cronFree(replaced);
+        return;
+    }
 
     set_number_hits(replaced, targ, 1, max + 1, error);
     cronFree(replaced);
@@ -1173,24 +1264,6 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
 }
 
 static void set_days(char* field, uint8_t* targ, int max, const char** error) {
-    /* WEEK: if field ends in 'L':
-     * only 'L'? replace with Saturday/Sunday
-     * day before 'L'? Last xday (mon,tue,...) of month
-     *
-     * if field is 'L-x': x days before last day of the week (better for month, maybe skip here?)
-     * RANGES DISCOURAGED
-     */
-    /* MONTH: if field ends in 'L':
-     * only 'L'? last day of the month
-     *
-     * if field is 'L-x': x days before last day of the month
-     * RANGES DISCOURAGED
-     *
-     * if field ends in 'W':
-     * 'W' after day? next weekday to that day in month
-     * 'LW'? Last weekday of the month
-     * NO RANGES ALLOWED
-     */
     if (1 == strlen(field) && '?' == field[0]) {
         field[0] = '*';
     }
@@ -1207,14 +1280,118 @@ static void set_days_of_month(char* field, uint8_t* targ, const char** error) {
 
 }
 
-void cron_parse_expr(const char* expression, cron_expr* target, const char** error) {
+static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_expr* target, const char** error)
+{
+    char* has_l = strchr(field, 'L');
+    int err;
+
+    if (has_l) {
+        switch (pos) {
+            case 3: {
+                // Day of month
+                // Ensure nothing is in field before L
+                if (has_l != field) {
+                    *error = "L only allowed as first and only option (with an offset or W) in 'day of month' field";
+                    return;
+                }
+                // Ensure no specific days are set in day of week
+                if ( (target->days_of_week[0] ^ 0x7f) != 0 ) {
+                    *error = "Cannot set specific days of week if using 'L' in days of month.";
+                    return;
+                }
+                // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
+                // Also, char following 'L' has to be either '-', 'W' or '\0'
+                if ( (has_char(field, ',') || has_char(field, '/')) || \
+              !( (*(field+1) == '-') || (*(field+1) == 'W') || (*(field+1) == '\0') ) ) {
+                    *error = "L only allowed in combination before an offset or before W in 'day of month' field";
+                    return;
+                }
+                cron_setBit(target->months, 14);
+                if (has_char(field, '-')) {
+                    if ( *(has_l+1) == '-' && has_l == field) {
+                        // offset is specified, L is starting dom
+                        if(offset) {
+                            *offset = parse_uint(has_l + 2, &err);
+                        } else {
+                            *error = "Offset found in 'day of month', but no valid pointer given";
+                            return;
+                        }
+                        if (err) {
+                            *error = "Error parsing L offset in 'day of month'";
+                            return;
+                        }
+                        if (*offset > 30) {
+                            *error = "Invalid offset for L in 'day of month'";
+                            return;
+                        }
+                        // Because dom field will be '*', the offset will be set after set_days_of_month
+                    }
+                }
+                *has_l = '\0';
+                // avoid an empty dom field when string is starting with 'L'
+                if (strlen(field) == 0) {
+                    *field = '*';
+                    if ( strlen(field) > 1) {
+                        strcpy(field, "*");
+                    }
+                }
+            }
+            break;
+            case 5: {
+                // Day of week
+                if ( has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
+                    *error = "L only allowed in combination with one day in 'day of week' field";
+                    return;
+                }
+                if ( (has_l == field) && (strlen(field) == 1) ) {
+                    *has_l = '0'; // Only L, so replace with sunday
+                } else {
+                    cron_setBit(target->months, 13);
+                    *has_l = '\0';
+                }
+            }
+            break;
+            default:
+                *error = "Trying to find 'L' in unsupported field";
+                break;
+        }
+    }
+}
+
+static void w_check(char* field, cron_expr* target, const char** error)
+{
+    char* has_w = strchr(field, 'W');
+
+    // Only available for dom, so no pos checking needed
+    if (has_w) {
+        // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
+        if (has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
+            *error = "W only allowed in combination with one day or after L in 'day of month' field";
+            return;
+        }
+        // Ensure no specific days are set in day of week
+        if ( (target->days_of_week[0] ^ 0x7f) != 0 ) {
+                *error = "Cannot set specific days of week when using 'W' in days of month.";
+                return;
+        }
+        // Ensure nothing follows 'W'
+        if (*(has_w + 1) != '\0') {
+            *error = "If W is used, 'day of month' field needs to end with it";
+            return;
+        }
+        cron_setBit(target->months, 15);
+        *has_w = '\0'; // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
+        // so only the day in front of W will be set
+    }
+}
+
+void cron_parse_expr(const char* expression, cron_expr* target, const char** error)
+{
     const char* err_local;
     size_t len = 0;
     char** fields = NULL;
     char* days_replaced = NULL;
-    char* w_check = NULL;
-    char* s_check = NULL;
-    char* l_check = NULL;
+    unsigned int offset = 0;
     if (!error) {
         error = &err_local;
     }
@@ -1230,77 +1407,29 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         goto return_res;
     }
 
-    // Find Hs, init seed and replace them
-    for (size_t i = 0; i < len; i++)
-    {
-        int local_max = 0;
-        char* has_h = strchr(fields[i], 'H');
-        if (has_h) {
-            if (i > 3) {
-                char* oldfield = fields[i];
-                fields[i] = replace_ordinals(fields[i], i == 4 ? MONTHS_ARR : DAYS_ARR, i == 4 ? CRON_MONTHS_ARR_LEN : CRON_DAYS_ARR_LEN);
-                cronFree(oldfield);
-                has_h = strchr(fields[i], 'H'); // Search for H again, since it might be gone if it was only an 'H' in 'THU'
-                if (!has_h) {
-                    continue; // no more 'H' in field? Skip replacement step then
-                }
-            }
-            if ( *(has_h+1) == '/') { /* H before an iterator */
-                sscanf(has_h, "H/%2d", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
-                if (!local_max) { /* iterator might have been specified as an ordinal instead... */
-                    *error = "Hashed: Iterator error";
-                    goto return_res;
-                }
-            }
-            switch (i) {
-                case 0: // seconds; technically same case as minutes
-                    fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_SECONDS, fn, error);
-                    break;
-                case 1: // minutes
-                    fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_MINUTES, fn, error);
-                    break;
-                case 2: // hours
-                    fields[i] = replace_hashed(fields[i], i, 0, local_max ? local_max : CRON_MAX_HOURS, fn, error);
-                    break;
-                case 3: // day of month
-                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : 28, fn, error); // limited to 28th so the hashed cron will be executed every month
-                    break;
-                case 4: // month
-                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
-                    break;
-                case 5: // day of week
-                    fields[i] = replace_hashed(fields[i], i, 1, local_max ? local_max : CRON_MAX_DAYS_OF_WEEK, fn, error);
-                    break;
-                default:
-                    *error = "Too many fields! (Should have failed before loop already)";
-                    goto return_res;
-            }
-        }
-        if (*error) goto return_res;
-    }
-
+    fields[0] = h_finder(fields[0], 0, 0, error);
+    if (*error) goto return_res;
     set_number_hits(fields[0], target->seconds, 0, 60, error);
+    if (*error) goto return_res;
+
+    fields[1] = h_finder(fields[1], 1, 0, error);
     if (*error) goto return_res;
     set_number_hits(fields[1], target->minutes, 0, 60, error);
     if (*error) goto return_res;
+
+    fields[2] = h_finder(fields[2], 2, 0, error);
+    if (*error) goto return_res;
     set_number_hits(fields[2], target->hours, 0, 24, error);
     if (*error) goto return_res;
+
     to_upper(fields[5]);
     days_replaced = replace_ordinals(fields[5], DAYS_ARR, CRON_DAYS_ARR_LEN);
-    if ( (l_check = strchr(days_replaced, 'L')) ) {
-        if ( has_char(fields[5], ',') || has_char(fields[5], '/') || has_char(fields[5], '-')) {
-            *error = "L only allowed in combination with one day in \"day of week\" field";
-            cronFree(days_replaced);
-            goto return_res;
-        }
-        if ( (l_check == days_replaced) && (strlen(days_replaced) == 1) ) {
-            *l_check = '0'; // Only L, so replace with sunday
-        } else {
-            cron_setBit(target->months, 13);
-            *l_check = '\0';
-        }
-
+    days_replaced = h_finder(days_replaced, 5, 1, error);
+    if (*error) {
+        cronFree(days_replaced);
+        goto return_res;
     }
+    l_check(days_replaced, 5, NULL, target, error);
     set_days(days_replaced, target->days_of_week, 8, error);
     cronFree(days_replaced);
     if (*error) goto return_res;
@@ -1309,6 +1438,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         cron_setBit(target->days_of_week, 0);
         cron_delBit(target->days_of_week, 7);
     }
+
     // Days of month: Ensure L-flag for dow is unset, unless the field is '*'
     if ( (strcmp(fields[3], "*") != 0) && (strcmp(fields[3], "?") != 0)) {
         if (cron_getBit(target->months, 13)) {
@@ -1317,43 +1447,18 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         }
     }
     // Days of month: Test for W, if there, set 16th bit in months
-    if ( (w_check = strchr(fields[3], 'W')) ) {
-        // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-        if ( has_char(fields[3], ',') || has_char(fields[3], '/') || has_char(fields[3], '-')) {
-            *error = "W only allowed in combination with one day or after L in \"day of month\" field";
-            goto return_res;
-        }
-        // Ensure nothing follows 'W'
-        if (*(w_check+1) != '\0') {
-            *error = "If W is used, \"day of month\" field needs to end with it";
-            goto return_res;
-        }
-        cron_setBit(target->months, 15);
-        *w_check = '\0'; // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
-                         // so only the day in front of W will be set
-    }
+    w_check(fields[3], target, error);
+    if (*error) goto return_res;
     // Days of month: Test for L, if there, set 15th bit in months
-    if ( (s_check = strchr(fields[3], 'L')) ) {
-        // Ensure nothing is in field before L
-        if (s_check != fields[3]) {
-            *error = "L only allowed as first and only option (with an offset) in \"day of month\" field";
-            goto return_res;
-        }
-        // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-        if ( has_char(fields[3], ',') || has_char(fields[3], '/') ) {
-            *error = "L only allowed in combination with an offset or before W in \"day of month\" field";
-            goto return_res;
-        }
-        cron_setBit(target->months, 14);
-        *s_check = '\0';
-        // avoid an empty dom field when string is 'LW'
-        if (strlen(fields[3]) == 0) {
-            *fields[3] = '*';
-        }
-    }
+    l_check(fields[3], 3, &offset, target, error);
+    if (*error) goto return_res;
+    fields[3] = h_finder(fields[3], 3, 1, error);
+    if (*error) goto return_res;
     set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
-    set_months(fields[4], target->months, error);
+    if (offset) cron_delBit(target->days_of_month, offset);
+
+    set_months(fields[4], target->months, error); // h_finder incorporated into set_months
     if (*error) goto return_res;
 
     goto return_res;

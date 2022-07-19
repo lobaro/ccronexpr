@@ -222,7 +222,10 @@ void check_expr_invalid(const char* expr) {
     cron_expr test;
     memset(&test, 0, sizeof(test));
     cron_parse_expr(expr, &test, &err);
-    assert(err);
+    if (!err) {
+        printf("Error: '%s' parsed without an error", expr);
+        assert(err);
+    }
 }
 
 int fake_custom_hash_function(int seed, uint8_t idx)
@@ -353,7 +356,13 @@ void test_expr() {
     check_next("0 0 1 L * ?",     "2020-02-12_00:00:00", "2020-02-29_01:00:00");
     check_next("0 0 1 ? * L",     "2022-05-12_00:00:00", "2022-05-15_01:00:00");
     check_next("0 0 1 ? * 4L",    "2022-05-12_00:00:00", "2022-05-26_01:00:00");
-    //check_next("0 0 1 L-2 * ?",   "2022-05-12_00:00:00", "2022-05-29_01:00:00");
+    check_next("0 0 1 ? * 1L",    "2022-03-29_00:00:00", "2022-04-25_01:00:00");
+    check_next("0 0 1 ? * 5L",    "2022-06-25_00:00:00", "2022-07-29_01:00:00");
+    check_next("0 0 1 L-2 * ?",   "2022-05-12_00:00:00", "2022-05-29_01:00:00");
+    check_next("0 0 1 L-3 * ?",   "2020-02-12_00:00:00", "2020-02-26_01:00:00");
+    check_next("0 0 1 L-30 * ?",  "2022-03-01_00:00:00", "2022-03-01_01:00:00");
+    check_next("0 0 1 L-30 * ?",  "2022-01-02_00:00:00", "2022-03-01_01:00:00");
+    check_next("0 0 1 L-30 * ?",  "2022-05-12_00:00:00", "2022-07-01_01:00:00");
 }
 
 void test_parse() {
@@ -392,11 +401,18 @@ void test_parse() {
     check_expr_invalid("0 0 1 10L * ?");
     check_expr_invalid("0 0 1 L/7 * ?");
     check_expr_invalid("0 0 1 HLW * ?");
+    check_expr_invalid("0 0 1 HL/H * ?");
+    check_expr_invalid("0 0 1 HL/HW * ?");
     check_expr_invalid("0 0 1 ? * 5L,SUN");
+    check_expr_invalid("0 0 1 ? * H/L");
     check_expr_invalid("0 0 1 ? * 19L");
     check_expr_invalid("0 0 1 17 * 5L");
     check_expr_invalid("0 0 1 ? * L-7");
     check_expr_invalid("0 0 1 ? * 5L-7");
+    check_expr_invalid("0 0 1 5L-7 * ?");
+    check_expr_invalid("0 0 1 L12 * ?");
+    check_expr_invalid("0 0 1 L12- * ?");
+    check_expr_invalid("0 0 1 L1-4 * ?");
 }
 
 void test_bits() {
