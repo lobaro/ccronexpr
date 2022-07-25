@@ -395,16 +395,16 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
             // Special case: If already past the last weekday of the month, roll over into the next month
             // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
             while (1) {
-                // Goto last day of month
-                unsigned int currentmonth = calendar->tm_mon;
-                while (currentmonth == calendar->tm_mon) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    day_of_month = calendar->tm_mday;
+                // Goto first day of following month
+                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+                if (err) {
+                    *res_out = 1;
+                    return 0;
+                }
+                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
+                if (err) {
+                    *res_out = 1;
+                    return 0;
                 }
                 // Then, go back to the end of starting month
                 err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
@@ -450,17 +450,18 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
             // Find last day in current month
             while (1)
             {
-                unsigned int currentmonth = calendar->tm_mon;
-                while (currentmonth == calendar->tm_mon) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    day_of_month = calendar->tm_mday;
+                // Goto first day of following month
+                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+                if (err) {
+                    *res_out = 1;
+                    return 0;
                 }
-                // Finally, go back to the end of starting month
+                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
+                if (err) {
+                    *res_out = 1;
+                    return 0;
+                }
+                // Then, go back to the end of starting month
                 err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
 
                 if (err) {
@@ -575,21 +576,25 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
 
             while (1)
             {
-                while (currentmonth == calendar->tm_mon) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
+                // Goto first day of following month
+                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+                if (err) {
+                    *res_out = 1;
+                    return 0;
                 }
-                // Finally, go back to the end of starting month
+                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
+                if (err) {
+                    *res_out = 1;
+                    return 0;
+                }
+                // Then, go back to the end of starting month
                 err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
 
                 if (err) {
                     *res_out = 1;
                     return 0;
                 }
+                day_of_month = calendar->tm_mday;
 
                 // If offset is set, go back offset days from end of month
                 if ((offset = next_set_bit(offset_mask, CRON_MAX_DAYS_OF_MONTH, 1, &err))) {
@@ -611,13 +616,19 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
                 }
                 // Check current trigger date is after startdate, otherwise roll over into next month and start again
                 if (calendar->tm_mon == startmonth && calendar->tm_mday < startday) {
-                    while (currentmonth == calendar->tm_mon) {
-                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                        if (err) {
-                            *res_out = 1;
-                            return 0;
-                        }
+                    // Goto first day of following month
+                    err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
                     }
+                    err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+
+                    day_of_month = calendar->tm_mday;
                     currentmonth = calendar->tm_mon;
                     continue;
                 }
