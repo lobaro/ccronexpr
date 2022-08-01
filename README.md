@@ -63,6 +63,9 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+**2022-08-01**
+ * `do_next` finding next trigger date via iteration instead of recursion
+
 **2022-07-19**
 
  * Support for `H`, `L` and `W` in expressions

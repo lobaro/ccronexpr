@@ -175,13 +175,10 @@ static unsigned int next_set_bit(uint8_t* bits, unsigned int max, unsigned int f
     return 0;
 }
 
-/// Set last unset entry in reset array to *fi* (*arr* is usually initialized with -1 as every entry)
+/// Clear bit in reset byte at position *fi* (*arr* is usually initialized with -1)
 /// Example: push_to_fields_arr(array, CRON_CF_MINUTE)
-///     - if used on a completely "new" array, would set seconds to 2 (CRON_CF_MINUTE) and return
-///     - if used on an array with seconds set, would set minutes to 2 and return (usual)
-///     - [...]
+///     - if used on a completely "new" array, would clear bit 2 (CRON_CF_MINUTE) and return
 static void push_to_fields_arr(int8_t* arr, int fi) {
-    int i;
     if (!arr || -1 == fi) {
         return;
     }
@@ -223,7 +220,7 @@ static int add_to_field(struct tm* calendar, int field, int val) {
 }
 
 /**
- * Reset the calendar setting all the fields provided to zero.
+ * Reset the calendar field (at position field) to 0/1.
  */
 static int reset(struct tm* calendar, int field) {
     if (!calendar || -1 == field) {
@@ -278,6 +275,7 @@ static int reset_all(struct tm* calendar, int8_t* fields) {
         if ( !(*fields & (1 << i)) ) { // reset when value was already considered "right", so bit was cleared
             res = reset(calendar, i);
             if (0 != res) return res;
+            *fields |= 1 << i; // reset field bit here, so it will not be reset on next iteration if necessary
         }
     }
     return 0;
@@ -687,8 +685,8 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
 static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     int i;
     int res = 0;
-    int8_t resets = -1;
-    const int8_t empty_list = -1;
+    int8_t resets = -2; // First bit (seconds) should always be unset, because if minutes roll over (and seconds didn't), seconds need to be reset as well
+    const int8_t empty_list = -1; // Only used for seconds; they shouldn't reset themselves after finding a match
     unsigned int second = 0;
     unsigned int update_second = 0;
     unsigned int minute = 0;
@@ -701,69 +699,73 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     unsigned int month = 0;
     unsigned int update_month = 0;
 
-    second = calendar->tm_sec;
-    update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE, (int8_t*)&empty_list, &res); // Value should not be changed since all bits are already set, so discarding const explicitly
-    if (0 != res) goto return_result;
-    if (second == update_second) {
-        push_to_fields_arr(&resets, CRON_CF_SECOND);
-    }
-
-    minute = calendar->tm_min;
-    update_minute = find_next(expr->minutes, CRON_MAX_MINUTES, minute, calendar, CRON_CF_MINUTE, CRON_CF_HOUR_OF_DAY, &resets, &res);
-    if (0 != res) goto return_result;
-    if (minute == update_minute) { //
-        push_to_fields_arr(&resets, CRON_CF_MINUTE);
-    } else {
-        res = do_next(expr, calendar, dot);
+    while (resets) {
+        second = calendar->tm_sec;
+        update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE,
+                                  (int8_t *) &empty_list,
+                                  &res); // Value should not be changed since all bits are already set, so discarding const explicitly
         if (0 != res) goto return_result;
-    }
-
-    hour = calendar->tm_hour;
-    update_hour = find_next(expr->hours, CRON_MAX_HOURS, hour, calendar, CRON_CF_HOUR_OF_DAY, CRON_CF_DAY_OF_WEEK, &resets, &res);
-    if (0 != res) goto return_result;
-    if (hour == update_hour) {
-        push_to_fields_arr(&resets, CRON_CF_HOUR_OF_DAY);
-    } else {
-        res = do_next(expr, calendar, dot);
-        if (0 != res) goto return_result;
-    }
-
-    day_of_week = calendar->tm_wday;
-    day_of_month = calendar->tm_mday;
-    month = calendar->tm_mon;
-    // L & W parameters
-    uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
-    if (cron_getBit(expr->months, 15)) { // W DOM bit
-        lw_flags |= (1 << 0);
-    }
-    if (cron_getBit(expr->months, 14)) { // L DOM bit
-        lw_flags |= (1 << 1);
-    }
-    if (cron_getBit(expr->months, 13)) { // L DOW bit
-        lw_flags |= (1 << 2);
-    }
-
-    update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week, day_of_week, lw_flags, &resets, &res);
-    if (0 != res) goto return_result;
-    if (day_of_month == update_day_of_month && month == calendar->tm_mon) {
-        push_to_fields_arr(&resets, CRON_CF_DAY_OF_MONTH);
-    } else {
-        res = do_next(expr, calendar, dot);
-        if (0 != res) goto return_result;
-    }
-
-    month = calendar->tm_mon; /*day already adds one if no day in same month is found*/
-    update_month = find_next(expr->months, CRON_MAX_MONTHS, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, &resets, &res);
-    if (0 != res) goto return_result;
-    if (month != update_month) {
-        if (calendar->tm_year - dot > 4) {
-            res = -1;
-            goto return_result;
+        if (second == update_second) {
+            push_to_fields_arr(&resets, CRON_CF_SECOND);
         }
-        res = do_next(expr, calendar, dot);
+
+        minute = calendar->tm_min;
+        update_minute = find_next(expr->minutes, CRON_MAX_MINUTES, minute, calendar, CRON_CF_MINUTE,
+                                  CRON_CF_HOUR_OF_DAY, &resets, &res);
         if (0 != res) goto return_result;
+        if (minute == update_minute) { //
+            push_to_fields_arr(&resets, CRON_CF_MINUTE);
+        } else {
+            continue;
+        }
+
+        hour = calendar->tm_hour;
+        update_hour = find_next(expr->hours, CRON_MAX_HOURS, hour, calendar, CRON_CF_HOUR_OF_DAY, CRON_CF_DAY_OF_WEEK,
+                                &resets, &res);
+        if (0 != res) goto return_result;
+        if (hour == update_hour) {
+            push_to_fields_arr(&resets, CRON_CF_HOUR_OF_DAY);
+        } else {
+            continue;
+        }
+
+        day_of_week = calendar->tm_wday;
+        day_of_month = calendar->tm_mday;
+        month = calendar->tm_mon;
+        // L & W parameters
+        uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
+        if (cron_getBit(expr->months, 15)) { // W DOM bit
+            lw_flags |= (1 << 0);
+        }
+        if (cron_getBit(expr->months, 14)) { // L DOM bit
+            lw_flags |= (1 << 1);
+        }
+        if (cron_getBit(expr->months, 13)) { // L DOW bit
+            lw_flags |= (1 << 2);
+        }
+
+        update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week,
+                                            day_of_week, lw_flags, &resets, &res);
+        if (0 != res) goto return_result;
+        if (day_of_month == update_day_of_month && month == calendar->tm_mon) {
+            push_to_fields_arr(&resets, CRON_CF_DAY_OF_MONTH);
+        } else {
+            continue;
+        }
+
+        month = calendar->tm_mon; /*day already adds one if no day in same month is found*/
+        update_month = find_next(expr->months, CRON_MAX_MONTHS, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, &resets,
+                                 &res);
+        if (0 != res) goto return_result;
+        if (month != update_month) {
+            if (calendar->tm_year - dot > 4) {
+                res = -1;
+                goto return_result;
+            }
+            continue;
+        }
+        goto return_result;
     }
-    goto return_result;
 
     return_result:
     return res;
@@ -1490,7 +1492,7 @@ time_t cron_next(cron_expr* expr, time_t date) {
         /* We arrived at the original timestamp - round up to the next whole second and try again... */
         res = add_to_field(calendar, CRON_CF_SECOND, 1);
         if (0 != res) return CRON_INVALID_INSTANT;
-        int res = do_next(expr, calendar, calendar->tm_year);
+        res = do_next(expr, calendar, calendar->tm_year);
         if (0 != res) return CRON_INVALID_INSTANT;
     }
 
