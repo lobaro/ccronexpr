@@ -180,20 +180,12 @@ static unsigned int next_set_bit(uint8_t* bits, unsigned int max, unsigned int f
 ///     - if used on a completely "new" array, would set seconds to 2 (CRON_CF_MINUTE) and return
 ///     - if used on an array with seconds set, would set minutes to 2 and return (usual)
 ///     - [...]
-static void push_to_fields_arr(int* arr, int fi) {
+static void push_to_fields_arr(int8_t* arr, int fi) {
     int i;
     if (!arr || -1 == fi) {
         return;
     }
-    for (i = 0; i < CRON_CF_ARR_LEN; i++) {
-        if (arr[i] == fi) return;
-    }
-    for (i = 0; i < CRON_CF_ARR_LEN; i++) {
-        if (-1 == arr[i]) {
-            arr[i] = fi;
-            return;
-        }
-    }
+    *arr &= ~(1 << fi); // Unset bit at position fi
 }
 
 static int add_to_field(struct tm* calendar, int field, int val) {
@@ -270,21 +262,21 @@ static int reset(struct tm* calendar, int field) {
 }
 
 /**
- * Reset fields in calendar to 0/1 (if day of month), provided their field entry is not -1.
+ * Reset fields in calendar to 0/1 (if day of month), provided their field bit is not set.
  *
- * @param calendar Pointer to a struct tm; it's fields will be reset to 0/1, if the corresponding field entry is not -1, but it's CRON_CF_value.
- * @param fields Array of CRON_CF_ARRAY_LEN; each entry is either -1 (no reset) or its position in the field, so it will reset its corresponding field in calendar.
+ * @param calendar Pointer to a struct tm; its fields will be reset to 0/1, if the corresponding field bit is not set.
+ * @param fields Array of CRON_CF_ARRAY_LEN; each bit is either 1 (no reset) or 0, so it will reset its corresponding field in calendar.
  * @return 1 if a reset fails, 0 if successful.
  */
-static int reset_all(struct tm* calendar, int* fields) {
+static int reset_all(struct tm* calendar, int8_t* fields) {
     int i;
     int res = 0;
     if (!calendar || !fields) {
         return 1;
     }
     for (i = 0; i < CRON_CF_ARR_LEN; i++) {
-        if (-1 != fields[i]) {
-            res = reset(calendar, fields[i]);
+        if ( !(*fields & (1 << i)) ) { // reset when value was already considered "right", so bit was cleared
+            res = reset(calendar, i);
             if (0 != res) return res;
         }
     }
@@ -337,11 +329,11 @@ static int set_field(struct tm* calendar, int field, int val) {
  * @param calendar Pointer to calendar structure. Starting with the original date, its fields will be replaced with the next trigger time from seconds to year.
  * @param field Integer showing which field is currently searched for, used to set/reset that field in calendar.
  * @param nextField Integer showing which field is following the searched field, used to increment that field in calendar, if a roll-over happens.
- * @param lower_orders Array marking which fields in calendar should be reset by [reset_all](#reset_all). Usually all lower calendar fields which are equal to
+ * @param lower_orders 8 bit int marking which fields in calendar should be reset by [reset_all](#reset_all). 1 bit per field. Usually all lower calendar fields which are not -1 in lower_orders
  * @param res_out Pointer to error code output. (Will be checked by do_next().)
  * @return Either next trigger value for or 0 if field could not be set in calendar or lower calendar fields could not be reset. (If failing, *res_out will be set to 1 as well.)
  */
-static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, unsigned int field, unsigned int nextField, int* lower_orders, int* res_out) {
+static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, unsigned int field, unsigned int nextField, int8_t* lower_orders, int* res_out) {
     int notfound = 0;
     int err = 0;
     unsigned int next_value = next_set_bit(bits, max, value, &notfound);
@@ -378,7 +370,7 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t lw_flags, int* resets, int* res_out)
+static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t lw_flags, int8_t* resets, int* res_out)
 {
     int err;
     unsigned int count = 0;
@@ -653,7 +645,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
     return day_of_month;
 }
 
-static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t lw_flags, int* resets, int* res_out) {
+static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t lw_flags, int8_t* resets, int* res_out) {
     int err;
     unsigned int count = 0;
     const unsigned int max = 366;
@@ -695,8 +687,8 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
 static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     int i;
     int res = 0;
-    int* resets = NULL;
-    int* empty_list = NULL;
+    int8_t resets = -1;
+    const int8_t empty_list = -1;
     unsigned int second = 0;
     unsigned int update_second = 0;
     unsigned int minute = 0;
@@ -709,37 +701,28 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     unsigned int month = 0;
     unsigned int update_month = 0;
 
-    resets = (int*) cronMalloc(CRON_CF_ARR_LEN * sizeof(int));
-    if (!resets) goto return_result;
-    empty_list = (int*) cronMalloc(CRON_CF_ARR_LEN * sizeof(int));
-    if (!empty_list) goto return_result;
-    for (i = 0; i < CRON_CF_ARR_LEN; i++) {
-        resets[i] = -1;
-        empty_list[i] = -1;
-    }
-
     second = calendar->tm_sec;
-    update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE, empty_list, &res);
+    update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE, (int8_t*)&empty_list, &res); // Value should not be changed since all bits are already set, so discarding const explicitly
     if (0 != res) goto return_result;
     if (second == update_second) {
-        push_to_fields_arr(resets, CRON_CF_SECOND);
+        push_to_fields_arr(&resets, CRON_CF_SECOND);
     }
 
     minute = calendar->tm_min;
-    update_minute = find_next(expr->minutes, CRON_MAX_MINUTES, minute, calendar, CRON_CF_MINUTE, CRON_CF_HOUR_OF_DAY, resets, &res);
+    update_minute = find_next(expr->minutes, CRON_MAX_MINUTES, minute, calendar, CRON_CF_MINUTE, CRON_CF_HOUR_OF_DAY, &resets, &res);
     if (0 != res) goto return_result;
     if (minute == update_minute) { //
-        push_to_fields_arr(resets, CRON_CF_MINUTE);
+        push_to_fields_arr(&resets, CRON_CF_MINUTE);
     } else {
         res = do_next(expr, calendar, dot);
         if (0 != res) goto return_result;
     }
 
     hour = calendar->tm_hour;
-    update_hour = find_next(expr->hours, CRON_MAX_HOURS, hour, calendar, CRON_CF_HOUR_OF_DAY, CRON_CF_DAY_OF_WEEK, resets, &res);
+    update_hour = find_next(expr->hours, CRON_MAX_HOURS, hour, calendar, CRON_CF_HOUR_OF_DAY, CRON_CF_DAY_OF_WEEK, &resets, &res);
     if (0 != res) goto return_result;
     if (hour == update_hour) {
-        push_to_fields_arr(resets, CRON_CF_HOUR_OF_DAY);
+        push_to_fields_arr(&resets, CRON_CF_HOUR_OF_DAY);
     } else {
         res = do_next(expr, calendar, dot);
         if (0 != res) goto return_result;
@@ -760,17 +743,17 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         lw_flags |= (1 << 2);
     }
 
-    update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week, day_of_week, lw_flags, resets, &res);
+    update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week, day_of_week, lw_flags, &resets, &res);
     if (0 != res) goto return_result;
     if (day_of_month == update_day_of_month && month == calendar->tm_mon) {
-        push_to_fields_arr(resets, CRON_CF_DAY_OF_MONTH);
+        push_to_fields_arr(&resets, CRON_CF_DAY_OF_MONTH);
     } else {
         res = do_next(expr, calendar, dot);
         if (0 != res) goto return_result;
     }
 
     month = calendar->tm_mon; /*day already adds one if no day in same month is found*/
-    update_month = find_next(expr->months, CRON_MAX_MONTHS, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, resets, &res);
+    update_month = find_next(expr->months, CRON_MAX_MONTHS, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, &resets, &res);
     if (0 != res) goto return_result;
     if (month != update_month) {
         if (calendar->tm_year - dot > 4) {
@@ -783,15 +766,6 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     goto return_result;
 
     return_result:
-    if (!resets || !empty_list) {
-        res = -1;
-    }
-    if (resets) {
-        cronFree(resets);
-    }
-    if (empty_list) {
-        cronFree(empty_list);
-    }
     return res;
 }
 
