@@ -492,14 +492,16 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
                 if ( (startmonth == calendar->tm_mon) && (startday > day_of_month) ) {
                     // Startmonth hasn't changed, but trigger day is before initial day
                     reset_all(calendar, resets);
-                    while (calendar->tm_mon - startmonth == 0) {
-                        // Roll over into next month
-                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-                        if (err) {
-                            *res_out = 1;
-                            return 0;
-                        }
+                    // Roll over into next month
+                    err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
                     }
                 } else break;
             }
