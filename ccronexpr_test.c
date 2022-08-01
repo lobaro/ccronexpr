@@ -378,6 +378,7 @@ void test_parse() {
     check_same("* * * * 2 *", "* * * * Feb *");
     check_same("*  *  * *  1 *", "* * * * 1 *");
     check_same("* * * * 1 L", "* * * * 1 SUN");
+    check_same("* * * * * *", "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19-59,H 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18-59,H 0,1,2,3,4,5,6,7,8,9,10,11-23,H 1,2,3,4,5,6,7,8,9,10,11,12,13,14-31,H jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec,H mon,tue,wed,thu,fri,sat,sun,H");
 
     check_expr_invalid("77 * * * * *");
     check_expr_invalid("44-77 * * * * *");
@@ -413,6 +414,7 @@ void test_parse() {
     check_expr_invalid("0 0 1 L12 * ?");
     check_expr_invalid("0 0 1 L12- * ?");
     check_expr_invalid("0 0 1 L1-4 * ?");
+    check_expr_invalid("0 0 1 L-31 * ?");
 }
 
 void test_bits() {
