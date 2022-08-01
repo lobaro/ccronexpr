@@ -27,7 +27,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
-#include <math.h>
 
 #include "ccronexpr.h"
 
@@ -368,19 +367,19 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t lw_flags, int8_t* resets, int* res_out)
+static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, int day_of_month, uint8_t* days_of_week, int day_of_week, uint8_t lw_flags, int8_t* resets, int* res_out)
 {
     int err;
     unsigned int count = 0;
     const unsigned int max = 366;
 
-    unsigned int startday = calendar->tm_mday;
-    unsigned int startmonth = calendar->tm_mon;
+    int startday = calendar->tm_mday;
+    int startmonth = calendar->tm_mon;
 
     switch (lw_flags) {
         case 4: {
             // L with day in DOW
-            unsigned int searched_weekday = next_set_bit(days_of_week, 8, 0, res_out);
+            int searched_weekday = next_set_bit(days_of_week, 8, 0, res_out);
             if (*res_out == 1) return 0;
             // Special case: If already past the last weekday of the month, roll over into the next month
             // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
@@ -531,7 +530,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
                     int sign = ( calendar->tm_wday ? 1 : -1);
                     // If SAT: Try to go 1 day back, if accidentally in previous month, go 3 days forward (to MON)
                     // If SUN: Inverted (1 day forward, if in next month, 3 days back)
-                    unsigned int oldmonth = calendar->tm_mon;
+                    int oldmonth = calendar->tm_mon;
                     err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1*sign); // go to next friday
                     if (err) {
                         *res_out = 1;
@@ -683,21 +682,20 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
  * @return Error code: 0 on success, other values (e. g. -1) mean failure.
  */
 static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
-    int i;
     int res = 0;
     int8_t resets = -2; // First bit (seconds) should always be unset, because if minutes roll over (and seconds didn't), seconds need to be reset as well
     const int8_t empty_list = -1; // Only used for seconds; they shouldn't reset themselves after finding a match
-    unsigned int second = 0;
-    unsigned int update_second = 0;
-    unsigned int minute = 0;
-    unsigned int update_minute = 0;
-    unsigned int hour = 0;
-    unsigned int update_hour = 0;
-    unsigned int day_of_week = 0;
-    unsigned int day_of_month = 0;
-    unsigned int update_day_of_month = 0;
-    unsigned int month = 0;
-    unsigned int update_month = 0;
+    int second = 0;
+    int update_second = 0;
+    int minute = 0;
+    int update_minute = 0;
+    int hour = 0;
+    int update_hour = 0;
+    int day_of_week = 0;
+    int day_of_month = 0;
+    int update_day_of_month = 0;
+    int month = 0;
+    int update_month = 0;
 
     while (resets) {
         second = calendar->tm_sec;
@@ -976,7 +974,7 @@ void init_custom_hash_fn(custom_hash_fn func)
  */
 static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsigned int max, custom_hash_fn hashFn, const char** error)
 {
-    int i = 0;
+    unsigned int i = 0;
     int value;
     char *newField = NULL;
 
@@ -1198,22 +1196,22 @@ static char* h_finder(char* field, unsigned int pos, unsigned int min, const cha
         }
         switch (pos) {
             case 0: // seconds; technically same case as minutes
-                field = replace_hashed(field, pos, 0, local_max ? local_max : CRON_MAX_SECONDS, fn, error);
+                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_SECONDS, fn, error);
                 break;
             case 1: // minutes
-                field = replace_hashed(field, pos, 0, local_max ? local_max : CRON_MAX_MINUTES, fn, error);
+                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_MINUTES, fn, error);
                 break;
             case 2: // hours
-                field = replace_hashed(field, pos, 0, local_max ? local_max : CRON_MAX_HOURS, fn, error);
+                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_HOURS, fn, error);
                 break;
             case 3: // day of month
-                field = replace_hashed(field, pos, 1, local_max ? local_max : 28, fn, error); // limited to 28th so the hashed cron will be executed every month
+                field = replace_hashed(field, pos, min, local_max ? local_max : 28, fn, error); // limited to 28th so the hashed cron will be executed every month
                 break;
             case 4: // month
-                field = replace_hashed(field, pos, 1, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
+                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
                 break;
             case 5: // day of week
-                field = replace_hashed(field, pos, 1, local_max ? local_max : CRON_MAX_DAYS_OF_WEEK, fn, error);
+                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_DAYS_OF_WEEK, fn, error);
                 break;
             default:
                 *error = "Unknown field!";
