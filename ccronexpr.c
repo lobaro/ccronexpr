@@ -37,15 +37,17 @@
 #define CRON_MAX_DAYS_OF_MONTH 32
 #define CRON_MAX_MONTHS 12
 
-#define CRON_CF_SECOND 0
-#define CRON_CF_MINUTE 1
-#define CRON_CF_HOUR_OF_DAY 2
-#define CRON_CF_DAY_OF_WEEK 3
-#define CRON_CF_DAY_OF_MONTH 4
-#define CRON_CF_MONTH 5
-#define CRON_CF_YEAR 6
+typedef enum {
+    CRON_CF_SECOND=0,
+    CRON_CF_MINUTE,
+    CRON_CF_HOUR_OF_DAY,
+    CRON_CF_DAY_OF_WEEK,
+    CRON_CF_DAY_OF_MONTH,
+    CRON_CF_MONTH,
+    CRON_CF_YEAR
+} cron_cf;
 
-#define CRON_CF_ARR_LEN 7
+#define CRON_CF_ARR_LEN 7 /* or (CRON_CF_YEAR-CRON_CF_SECOND+1) */
 
 #define CRON_INVALID_INSTANT ((time_t) -1)
 
@@ -177,15 +179,18 @@ static unsigned int next_set_bit(uint8_t* bits, unsigned int max, unsigned int f
 /// Clear bit in reset byte at position *fi* (*arr* is usually initialized with -1)
 /// Example: push_to_fields_arr(array, CRON_CF_MINUTE)
 ///     - if used on a completely "new" array, would clear bit 2 (CRON_CF_MINUTE) and return
-static void push_to_fields_arr(int8_t* arr, int fi) {
-    if (!arr || -1 == fi) {
+static void push_to_fields_arr(int8_t* arr, cron_cf fi) {
+    if (!arr) {
+        return;
+    }
+    if (fi >= CRON_CF_ARR_LEN) {
         return;
     }
     *arr &= ~(1 << fi); // Unset bit at position fi
 }
 
-static int add_to_field(struct tm* calendar, int field, int val) {
-    if (!calendar || -1 == field) {
+static int add_to_field(struct tm* calendar, cron_cf field, int val) {
+    if (!calendar) {
         return 1;
     }
     switch (field) {
@@ -221,8 +226,8 @@ static int add_to_field(struct tm* calendar, int field, int val) {
 /**
  * Reset the calendar field (at position field) to 0/1.
  */
-static int reset(struct tm* calendar, int field) {
-    if (!calendar || -1 == field) {
+static int reset(struct tm* calendar, cron_cf field) {
+    if (!calendar) {
         return 1;
     }
     switch (field) {
@@ -280,8 +285,8 @@ static int reset_all(struct tm* calendar, int8_t* fields) {
     return 0;
 }
 
-static int set_field(struct tm* calendar, int field, int val) {
-    if (!calendar || -1 == field) {
+static int set_field(struct tm* calendar, cron_cf field, int val) {
+    if (!calendar) {
         return 1;
     }
     switch (field) {
@@ -330,7 +335,7 @@ static int set_field(struct tm* calendar, int field, int val) {
  * @param res_out Pointer to error code output. (Will be checked by do_next().)
  * @return Either next trigger value for or 0 if field could not be set in calendar or lower calendar fields could not be reset. (If failing, *res_out will be set to 1 as well.)
  */
-static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, unsigned int field, unsigned int nextField, int8_t* lower_orders, int* res_out) {
+static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, cron_cf field, cron_cf nextField, int8_t* lower_orders, int* res_out) {
     int notfound = 0;
     int err = 0;
     unsigned int next_value = next_set_bit(bits, max, value, &notfound);
