@@ -303,7 +303,7 @@ void test_expr() {
     check_next("0 30 23 30 1/3 ?",  "2011-04-30_23:30:00", "2011-07-30_23:30:00");
     check_next("0 0 1 28 * ?",      "2022-02-28_02:00:00", "2022-03-28_01:00:00");
     // H Tests
-    init_hash(7);
+    cron_init_hash(7);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-10-03_12:43:49"); // 49 43 12 3 10 ?
     check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-10-02_12:43:49"); // 49 43 12 ? 10 SUN
     check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:49");
@@ -315,7 +315,7 @@ void test_expr() {
     check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-07-01_01:00:00");
     check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
     check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
-    init_hash(42);
+    cron_init_hash(42);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-03_17:43:54"); // 54 43 17 3 7 ?
     check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-07-02_17:43:54"); // 54 43 17 ? 7 SAM
     check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:54");
@@ -323,14 +323,14 @@ void test_expr() {
     check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-08-01_01:00:00");
     check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
     check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
-    init_hash(54321);
+    cron_init_hash(54321);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-04-11_22:34:27"); // 27 34 22 11 4 ?
     check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-04-01_22:34:27"); // 27 34 22 ? 4 SAM
     // Tests for a custom hash function
-    custom_hash_fn custom_fn = fake_custom_hash_function;
-    init_custom_hash_fn(custom_fn);
+    cron_custom_hash_fn custom_fn = fake_custom_hash_function;
+    cron_init_custom_hash_fn(custom_fn);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-02_04:58:34"); // 34 58 4 2 7 ?
-    init_custom_hash_fn(NULL);
+    cron_init_custom_hash_fn(NULL);
     // W Tests
     check_next("0 0 1 4W * ?",      "2022-04-12_00:00:00", "2022-05-04_01:00:00");
     check_next("0 0 1 4W * ?",      "2022-05-12_00:00:00", "2022-06-03_01:00:00");
