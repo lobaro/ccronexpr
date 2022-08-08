@@ -398,6 +398,7 @@ void test_parse() {
     check_expr_invalid("0 0 1 1W/3 * ?");
     check_expr_invalid("0 0 1 16WL * ?");
     check_expr_invalid("0 0 1 16LW * ?");
+    check_expr_invalid("0 0 1 W3 * ?");
     check_expr_invalid("0 0 1 WL * ?");
     check_expr_invalid("0 0 1 10L * ?");
     check_expr_invalid("0 0 1 L/7 * ?");

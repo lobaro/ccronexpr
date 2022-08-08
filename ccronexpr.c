@@ -1187,7 +1187,7 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 
 }
 
-static char* h_finder(char* field, unsigned int pos, unsigned int min, const char** error)
+static char* h_check(char* field, unsigned int pos, unsigned int min, const char** error)
 {
     unsigned int local_max = 0;
     char* has_h = strchr(field, 'H');
@@ -1237,7 +1237,7 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
     if (err) return;
     replaced = replace_ordinals(value, MONTHS_ARR, CRON_MONTHS_ARR_LEN);
     if (!replaced) return;
-    replaced = h_finder(replaced, 4, 1, error);
+    replaced = h_check(replaced, 4, 1, error);
     if (*error) {
         cronFree(replaced);
         return;
@@ -1399,24 +1399,24 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         goto return_res;
     }
 
-    fields[0] = h_finder(fields[0], 0, 0, error);
+    fields[0] = h_check(fields[0], 0, 0, error);
     if (*error) goto return_res;
     set_number_hits(fields[0], target->seconds, 0, 60, error);
     if (*error) goto return_res;
 
-    fields[1] = h_finder(fields[1], 1, 0, error);
+    fields[1] = h_check(fields[1], 1, 0, error);
     if (*error) goto return_res;
     set_number_hits(fields[1], target->minutes, 0, 60, error);
     if (*error) goto return_res;
 
-    fields[2] = h_finder(fields[2], 2, 0, error);
+    fields[2] = h_check(fields[2], 2, 0, error);
     if (*error) goto return_res;
     set_number_hits(fields[2], target->hours, 0, 24, error);
     if (*error) goto return_res;
 
     to_upper(fields[5]);
     days_replaced = replace_ordinals(fields[5], DAYS_ARR, CRON_DAYS_ARR_LEN);
-    days_replaced = h_finder(days_replaced, 5, 1, error);
+    days_replaced = h_check(days_replaced, 5, 1, error);
     if (*error) {
         cronFree(days_replaced);
         goto return_res;
@@ -1444,13 +1444,13 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     // Days of month: Test for L, if there, set 15th bit in months
     l_check(fields[3], 3, &offset, target, error);
     if (*error) goto return_res;
-    fields[3] = h_finder(fields[3], 3, 1, error);
+    fields[3] = h_check(fields[3], 3, 1, error);
     if (*error) goto return_res;
     set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
     if (offset) cron_delBit(target->days_of_month, offset);
 
-    set_months(fields[4], target->months, error); // h_finder incorporated into set_months
+    set_months(fields[4], target->months, error); // h_check incorporated into set_months
     if (*error) goto return_res;
 
     goto return_res;
