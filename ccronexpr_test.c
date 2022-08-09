@@ -174,7 +174,7 @@ void check_next(const char* pattern, const char* initial, const char* expected) 
     cron_expr parsed;
     memset(&parsed, 0, sizeof(parsed));
     cron_parse_expr(pattern, &parsed, &err);
-    if (err) printf("%s", err);
+    if (err) printf("%s\n", err);
 
     struct tm* calinit = poors_mans_strptime(initial);
     time_t dateinit = timegm(calinit);
@@ -223,7 +223,7 @@ void check_expr_invalid(const char* expr) {
     memset(&test, 0, sizeof(test));
     cron_parse_expr(expr, &test, &err);
     if (!err) {
-        printf("Error: '%s' parsed without an error", expr);
+        printf("Error: '%s' parsed without an error\n", expr);
         assert(err);
     }
 }
@@ -308,16 +308,17 @@ void test_expr() {
     check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-10-02_12:43:49"); // 49 43 12 ? 10 SUN
     check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:49");
     check_next("H 0,12 1 * * ?",    "2022-05-12_01:01:00", "2022-05-12_01:12:49");
+    check_next("H 0,H 1 * * ?",    "2022-05-12_01:01:00", "2022-05-12_01:43:49"); // H = 43
     check_next("H 0 1/4 * * ?",     "2022-05-12_01:01:00", "2022-05-12_05:00:49");
     check_next("H H 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:43:49");
-    check_next("H H,H 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:43:49");
+    check_next("H H,H 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:43:49"); // H,H is same as H
     check_next("0 H/10 1 * * ?",    "2022-05-12_00:00:00", "2022-05-12_01:03:00");
     check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-07-01_01:00:00");
     check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
     check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
     cron_init_hash(42);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-03_17:43:54"); // 54 43 17 3 7 ?
-    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-07-02_17:43:54"); // 54 43 17 ? 7 SAM
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-07-02_17:43:54"); // 54 43 17 ? 7 SAT
     check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:54");
     check_next("0 H/10 1 * * ?",    "2022-05-12_00:00:00", "2022-05-12_01:03:00");
     check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-08-01_01:00:00");
@@ -325,7 +326,7 @@ void test_expr() {
     check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
     cron_init_hash(54321);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-04-11_22:34:27"); // 27 34 22 11 4 ?
-    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-04-01_22:34:27"); // 27 34 22 ? 4 SAM
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-04-01_22:34:27"); // 27 34 22 ? 4 SAT
     // Tests for a custom hash function
     cron_custom_hash_fn custom_fn = fake_custom_hash_function;
     cron_init_custom_hash_fn(custom_fn);
@@ -354,6 +355,7 @@ void test_expr() {
     check_next("0 0 1 L * ?",     "2022-05-12_00:00:00", "2022-05-31_01:00:00");
     check_next("0 0 1 L * ?",     "2022-02-12_00:00:00", "2022-02-28_01:00:00");
     check_next("0 0 1 L * ?",     "2020-02-12_00:00:00", "2020-02-29_01:00:00");
+    check_next("0 0 1 L * ?",     "2021-02-12_00:00:00", "2021-02-28_01:00:00");
     check_next("0 0 1 ? * L",     "2022-05-12_00:00:00", "2022-05-15_01:00:00");
     check_next("0 0 1 ? * 4L",    "2022-05-12_00:00:00", "2022-05-26_01:00:00");
     check_next("0 0 1 ? * 1L",    "2022-03-29_00:00:00", "2022-04-25_01:00:00");
@@ -361,8 +363,10 @@ void test_expr() {
     check_next("0 0 1 L-2 * ?",   "2022-05-12_00:00:00", "2022-05-29_01:00:00");
     check_next("0 0 1 L-3 * ?",   "2020-02-12_00:00:00", "2020-02-26_01:00:00");
     check_next("0 0 1 L-30 * ?",  "2022-03-01_00:00:00", "2022-03-01_01:00:00");
-    check_next("0 0 1 L-30 * ?",  "2022-01-02_00:00:00", "2022-03-01_01:00:00");
-    check_next("0 0 1 L-30 * ?",  "2022-05-12_00:00:00", "2022-07-01_01:00:00");
+    check_next("0 0 1 L-30 * ?",  "2022-01-02_00:00:00", "2022-02-01_01:00:00");
+    check_next("0 0 1 L-31 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00"); // TODO: If L is bigger than the days of the month it must cap to 1
+    check_next("0 0 1 L-32 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00"); // TODO: Should pass, L-??? should end at 1. of Month
+    check_next("0 0 1 L-31 2 ?",  "2022-01-01_00:00:00", "2022-02-01_01:00:00"); // TODO: Should pass, L-??? should end at 1. of Month
 }
 
 void test_parse() {
@@ -415,7 +419,17 @@ void test_parse() {
     check_expr_invalid("0 0 1 L12 * ?");
     check_expr_invalid("0 0 1 L12- * ?");
     check_expr_invalid("0 0 1 L1-4 * ?");
-    check_expr_invalid("0 0 1 L-31 * ?");
+    // H can not be used in ranges
+    // TODO: Check all fields
+    check_expr_invalid("H H-H 1 * * ?" ); // H-H Must be error, H can not be used in ranges
+    check_expr_invalid("H H-H 1 * * ?"); // H-60 Must be error, H can not be used in ranges
+    check_expr_invalid("H 1-H 1 * * ?"); // H can not be used in ranges
+    check_expr_invalid("1-H 0 1 * * ?"); // H can not be used in ranges
+    check_expr_invalid("1-H 0 1 * * ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1-H * * ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1 1-H * ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1 * 1-H ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1 ? * 1-H"); // H can not be used in ranges
 }
 
 void test_bits() {
@@ -460,10 +474,10 @@ void test_memory() {
 
     cron_parse_expr("* * * * * *", &cron, &err);
     if (cronAllocations != 0) {
-        printf("Allocations != 0 but %d", cronAllocations);
+        printf("Allocations != 0 but %d\n", cronAllocations);
         assert(0);
     }
-    printf("Allocations: total: %d, max: %d", cronTotalAllocations, maxAlloc);
+    printf("Allocations: total: %d, max: %d\n", cronTotalAllocations, maxAlloc);
 }
 #endif
 

@@ -381,7 +381,7 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, int day_of_month, uint8_t* days_of_week, uint8_t lw_flags, uint8_t* reset_fields, int* res_out)
+static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, int day_of_month, uint8_t* days_of_week, uint8_t lw_flags, uint8_t* reset_fields, int* res_out) // TODO: No magic numbers for cases, defines/enums
 {
     int err;
     unsigned int count = 0;
@@ -608,14 +608,19 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
                         return 0;
                     }
                     if (currentmonth != calendar->tm_mon) {
-                        // Ended up in previous month? Go back to last day of current month, roll over and re-apply offset
-                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, offset + 1);
+                        // Ended up in previous month? Go to first of current month
+                        err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
                         if (err) {
                             *res_out = 1;
                             return 0;
                         }
+                        err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
+                        if (err) {
+                            *res_out = 1;
+                            return 0;
+                        }
+                        day_of_month = calendar->tm_mday;
                         currentmonth = calendar->tm_mon;
-                        continue;
                     }
                 }
                 // Check current trigger date is after startdate, otherwise roll over into next month and start again
@@ -996,12 +1001,6 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
         *error = "No H to replace in field";
         return field;
     }
-    // Multiple Hs per field are ok, but they will all be replaced with the same value
-    // Not changing that, since it would either eat up further field values or require a seed per field (original seed + field offset?)?
-    if (!hash_seed) {
-        *error = "Hash Seed not initialized";
-        return NULL;
-    }
 
     // Generate random value
     if (hashFn) {
@@ -1205,8 +1204,13 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
             sscanf(has_h, "H/%2d", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
             if (!local_max) { /* iterator might have been specified as an ordinal instead... */
                 *error = "Hashed: Iterator error";
-                return NULL;
+                return field;
             }
+        }
+        if ( *(has_h+1) =='-' || \
+        ( has_h != field && *(has_h-1) == '-') ) { // 'H' not starting field, so may be the end of a range
+            *error = "'H' is not allowed for use in ranges";
+            return field;
         }
         switch (pos) {
             case 0: // seconds; technically same case as minutes
@@ -1229,7 +1233,7 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
                 break;
             default:
                 *error = "Unknown field!";
-                return NULL;
+                return field;
         }
     }
     return field;
@@ -1281,7 +1285,7 @@ static void set_days_of_month(char* field, uint8_t* targ, const char** error) {
 
 }
 
-static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_expr* target, const char** error)
+static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_expr* target, const char** error) // TODO: No magic numbers for cases, defines/enums
 {
     char* has_l = strchr(field, 'L');
     int err;
@@ -1322,8 +1326,8 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
                             return;
                         }
                         if (*offset > 30) {
-                            *error = "Invalid offset for L in 'day of month'";
-                            return;
+                            // used to break, now it will simply set offset to 30
+                            *offset = 30;
                         }
                         // Because dom field will be '*', the offset will be set after set_days_of_month
                     }
