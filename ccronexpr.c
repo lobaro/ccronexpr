@@ -509,7 +509,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
             if (*res_out == 1) return 0;
             // Special case: If already past the last weekday of the month, roll over into the next month
             // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
-            while (1) {
+            while (count++ < max) {
                 // Goto first day of following month
                 err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
                 if (err) {
@@ -563,7 +563,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
             // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
 
             // Find last day in current month
-            while (1)
+            while (count++ < max)
             {
                 // Goto first day of following month
                 err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
@@ -631,7 +631,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
                 memset(&(offset_mask[i]), ~(*(days_of_month+i)), 1);
             }
 
-            while (1)
+            for (unsigned int loop = 0; loop < max; loop++)
             {
                 // Goto first day of following month
                 err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
