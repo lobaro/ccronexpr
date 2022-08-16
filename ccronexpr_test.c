@@ -364,9 +364,9 @@ void test_expr() {
     check_next("0 0 1 L-3 * ?",   "2020-02-12_00:00:00", "2020-02-26_01:00:00");
     check_next("0 0 1 L-30 * ?",  "2022-03-01_00:00:00", "2022-03-01_01:00:00");
     check_next("0 0 1 L-30 * ?",  "2022-01-02_00:00:00", "2022-02-01_01:00:00");
-    check_next("0 0 1 L-31 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00"); // TODO: If L is bigger than the days of the month it must cap to 1
-    check_next("0 0 1 L-32 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00"); // TODO: Should pass, L-??? should end at 1. of Month
-    check_next("0 0 1 L-31 2 ?",  "2022-01-01_00:00:00", "2022-02-01_01:00:00"); // TODO: Should pass, L-??? should end at 1. of Month
+    check_next("0 0 1 L-31 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00");
+    check_next("0 0 1 L-32 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00");
+    check_next("0 0 1 L-31 2 ?",  "2022-01-01_00:00:00", "2022-02-01_01:00:00");
 }
 
 void test_parse() {
@@ -420,9 +420,9 @@ void test_parse() {
     check_expr_invalid("0 0 1 L12- * ?");
     check_expr_invalid("0 0 1 L1-4 * ?");
     // H can not be used in ranges
-    // TODO: Check all fields
     check_expr_invalid("H H-H 1 * * ?" ); // H-H Must be error, H can not be used in ranges
     check_expr_invalid("H H-H 1 * * ?"); // H-60 Must be error, H can not be used in ranges
+    check_expr_invalid("H H-60 1 * * ?"); // H-60 Must be error, H can not be used in ranges
     check_expr_invalid("H 1-H 1 * * ?"); // H can not be used in ranges
     check_expr_invalid("1-H 0 1 * * ?"); // H can not be used in ranges
     check_expr_invalid("1-H 0 1 * * ?"); // H can not be used in ranges

@@ -44,10 +44,12 @@
 #define CRON_L_DOM_BIT 14
 #define CRON_W_DOM_BIT 15
 
-
+#define W_DOM_FLAG (1<<0)
+#define L_DOM_FLAG (1<<1)
+#define L_DOW_FLAG (1<<2)
 
 typedef enum {
-    CRON_CF_SECOND=0,
+    CRON_CF_SECOND = 0,
     CRON_CF_MINUTE,
     CRON_CF_HOUR_OF_DAY,
     CRON_CF_DAY_OF_WEEK,
@@ -55,6 +57,15 @@ typedef enum {
     CRON_CF_MONTH,
     CRON_CF_YEAR
 } cron_cf;
+
+typedef enum {
+    CRON_FIELD_SECOND = 0,
+    CRON_FIELD_MINUTE,
+    CRON_FIELD_HOUR,
+    CRON_FIELD_DAY_OF_MONTH,
+    CRON_FIELD_MONTH,
+    CRON_FIELD_DAY_OF_WEEK
+} cron_fieldpos;
 
 #define CRON_CF_ARR_LEN 7 /* or (CRON_CF_YEAR-CRON_CF_SECOND+1) */
 
@@ -391,7 +402,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
     int startmonth = calendar->tm_mon;
 
     switch (lw_flags) {
-        case 4: {
+        case L_DOW_FLAG: {
             // L with day in DOW
             int searched_weekday = next_set_bit(days_of_week, 8, 0, res_out);
             if (*res_out == 1) return 0;
@@ -445,7 +456,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
             }
         }
         break;
-        case 3: {
+        case (L_DOM_FLAG | W_DOM_FLAG): {
             // LW in DOM
             // Special case: If already past the last weekday of the month, roll over into the next month
             // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
@@ -510,9 +521,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
             }
         }
         break;
-        case 1: {
-            // W in DOM
-
+        case W_DOM_FLAG: {
             // Check first which day is the "desired" day (xxW):
             // - Is current day a Monday?
             //   - If yes, is desired day only one day before current day, or is it the 1st of month and current day the 3rd?
@@ -567,7 +576,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
             }
         }
         break;
-        case 2: {
+        case L_DOM_FLAG: {
             // L in DOM
 
             int currentmonth = startmonth;
@@ -751,14 +760,14 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         // L & W parameters
         uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
 
-        if (cron_getBit(expr->months, CRON_W_DOM_BIT)) { // W DOM bit
-            lw_flags |= (1 << 0);
+        if (cron_getBit(expr->months, CRON_W_DOM_BIT)) {
+            lw_flags |= W_DOM_FLAG;
         }
-        if (cron_getBit(expr->months, CRON_L_DOM_BIT)) { // L DOM bit
-            lw_flags |= (1 << 1);
+        if (cron_getBit(expr->months, CRON_L_DOM_BIT)) {
+            lw_flags |= L_DOM_FLAG;
         }
-        if (cron_getBit(expr->months, CRON_L_DOW_BIT)) { // L DOW bit
-            lw_flags |= (1 << 2);
+        if (cron_getBit(expr->months, CRON_L_DOW_BIT)) {
+            lw_flags |= L_DOW_FLAG;
         }
 
         update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week,
@@ -1213,22 +1222,22 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
             return field;
         }
         switch (pos) {
-            case 0: // seconds; technically same case as minutes
+            case CRON_FIELD_SECOND:
                 field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_SECONDS, fn, error);
                 break;
-            case 1: // minutes
+            case CRON_FIELD_MINUTE:
                 field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_MINUTES, fn, error);
                 break;
-            case 2: // hours
+            case CRON_FIELD_HOUR:
                 field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_HOURS, fn, error);
                 break;
-            case 3: // day of month
+            case CRON_FIELD_DAY_OF_MONTH:
                 field = replace_hashed(field, pos, min, local_max ? local_max : 28, fn, error); // limited to 28th so the hashed cron will be executed every month
                 break;
-            case 4: // month
+            case CRON_FIELD_MONTH:
                 field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
                 break;
-            case 5: // day of week
+            case CRON_FIELD_DAY_OF_WEEK:
                 field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_DAYS_OF_WEEK, fn, error);
                 break;
             default:
@@ -1285,15 +1294,14 @@ static void set_days_of_month(char* field, uint8_t* targ, const char** error) {
 
 }
 
-static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_expr* target, const char** error) // TODO: No magic numbers for cases, defines/enums
+static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_expr* target, const char** error)
 {
     char* has_l = strchr(field, 'L');
     int err;
 
     if (has_l) {
         switch (pos) {
-            case 3: {
-                // Day of month
+            case CRON_FIELD_DAY_OF_MONTH: {
                 // Ensure nothing is in field before L
                 if (has_l != field) {
                     *error = "L only allowed as first and only option (with an offset or W) in 'day of month' field";
@@ -1342,8 +1350,7 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
                 }
             }
             break;
-            case 5: {
-                // Day of week
+            case CRON_FIELD_DAY_OF_WEEK: {
                 if ( has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
                     *error = "L only allowed in combination with one day in 'day of week' field";
                     return;
@@ -1363,7 +1370,7 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
     }
 }
 
-static void w_check(char* field, cron_expr* target, const char** error)
+static void w_check(char* field, cron_expr* target, const char** error) // TODO: W flags per day, to allow lists for weekday execution only in CRON
 {
     char* has_w = strchr(field, 'W');
 
