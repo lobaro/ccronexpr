@@ -54,6 +54,7 @@ typedef struct {
     uint8_t hours[3];
     uint8_t days_of_week[1];
     uint8_t days_of_month[4];
+    uint8_t w_flags[4]; // Bits 0-30 for days 1-31, bit 31 for 'L'
     uint8_t months[2];
 } cron_expr;
 
@@ -89,6 +90,30 @@ time_t cron_next(cron_expr* expr, time_t date);
 uint8_t cron_getBit(uint8_t* rbyte, int idx);
 void cron_setBit(uint8_t* rbyte, int idx);
 void cron_delBit(uint8_t* rbyte, int idx);
+
+/**
+ * Function for deterministic replacing of 'H' in expression (similar to Jenkins feature)
+ * Seed: seed for random function
+ * idx: Index in cron, same idx must return the same value
+ *
+ * returns a hash that is always the same for the same seed and idx
+ */
+typedef int (*cron_custom_hash_fn)(int seed, uint8_t idx);
+/**
+ * Set seed for 'H' replacement number generation, to keep it deterministic.
+ * With default hash func, it will only be set when a number is generated and reset to a (previously generated) random number after;
+ * if using a custom function, you need to take care of that
+ * @param seed The seed to be used
+ */
+void cron_init_hash(int seed);
+/**
+ * Set a custom hash function to be used for 'H' replacement number generation
+ * @param func A function which can generate pseudo-random numbers based on a seed.
+ *             Needs to accept 2 parameters:
+ *             - A seed (int)
+ *             - An index (uint8_t), so the same position in a cron will always have the same number
+ */
+void cron_init_custom_hash_fn(cron_custom_hash_fn func);
 
 /**
  * Frees the memory allocated by the specified cron expression

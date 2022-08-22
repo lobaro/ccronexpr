@@ -156,26 +156,9 @@ int two_dec_num(const char* first) {
 /* 0123456789012345678 */
 struct tm* poors_mans_strptime(const char* str) {
     struct tm* cal = (struct tm*) malloc(sizeof(struct tm));
-    switch (str[3]) {
-    case '7':
-        cal->tm_year = 107;
-        break;
-    case '8':
-        cal->tm_year = 108;
-        break;
-    case '9':
-        cal->tm_year = 109;
-        break;
-    case '0':
-        cal->tm_year = 110;
-        break;
-    case '1':
-        cal->tm_year = 111;
-        break;
-    case '2':
-        cal->tm_year = 112;
-        break;
-    }
+    int year;
+    sscanf(str, "%4d", &year);
+    cal->tm_year = year - 1900;
     cal->tm_mon = two_dec_num(str + 5) - 1;
     cal->tm_mday = two_dec_num(str + 8);
     cal->tm_wday = 0;
@@ -191,6 +174,7 @@ void check_next(const char* pattern, const char* initial, const char* expected) 
     cron_expr parsed;
     memset(&parsed, 0, sizeof(parsed));
     cron_parse_expr(pattern, &parsed, &err);
+    if (err) printf("Error: %s\nPattern: %s\n", err, pattern);
 
     struct tm* calinit = poors_mans_strptime(initial);
     time_t dateinit = timegm(calinit);
@@ -238,7 +222,22 @@ void check_expr_invalid(const char* expr) {
     cron_expr test;
     memset(&test, 0, sizeof(test));
     cron_parse_expr(expr, &test, &err);
-    assert(err);
+    if (!err) {
+        printf("Error: '%s' parsed without an error\n", expr);
+        assert(err);
+    }
+}
+
+int fake_custom_hash_function(int seed, uint8_t idx)
+{
+    int newSeed = rand();
+    int val;
+    srand(seed);
+    for (int i = 0; i <= idx+1; i++) { // iterates 1 time more than default function
+        val = rand();
+    }
+    srand(newSeed);
+    return val;
 }
 
 void test_expr() {
@@ -281,6 +280,12 @@ void test_expr() {
     check_next("* * * * * 2",       "2010-10-27_15:12:42", "2010-11-02_00:00:00");
     check_next("55 5 * * * *",      "2010-10-27_15:04:54", "2010-10-27_15:05:55");
     check_next("55 5 * * * *",      "2010-10-27_15:05:55", "2010-10-27_16:05:55");
+    check_next("20,40 5 * * * *",   "2010-10-27_15:06:30", "2010-10-27_16:05:20");
+    check_next("20 6 * * * *",      "2010-10-27_15:06:30", "2010-10-27_16:06:20");
+    check_next("20 5,7 16 * * *",   "2010-10-27_15:06:30", "2010-10-27_16:05:20");
+    check_next("20,40 5 16 * * *",  "2010-10-27_15:06:30", "2010-10-27_16:05:20");
+    check_next("20 5 15,17 28 * *", "2010-10-27_15:06:30", "2010-10-28_15:05:20");
+    check_next("20,40 5 15,17 28 * *","2010-10-27_15:06:30", "2010-10-28_15:05:20");
     check_next("55 * 10 * * *",     "2010-10-27_09:04:54", "2010-10-27_10:00:55");
     check_next("55 * 10 * * *",     "2010-10-27_10:00:55", "2010-10-27_10:01:55");
     check_next("* 5 10 * * *",      "2010-10-27_09:04:55", "2010-10-27_10:05:00");
@@ -295,7 +300,98 @@ void test_expr() {
     check_next("0 0 7 ? * MON-FRI", "2009-09-28_07:00:00", "2009-09-29_07:00:00");
     check_next("0 30 23 30 1/3 ?",  "2010-12-30_00:00:00", "2011-01-30_23:30:00");
     check_next("0 30 23 30 1/3 ?",  "2011-01-30_23:30:00", "2011-04-30_23:30:00");
-    check_next("0 30 23 30 1/3 ?",  "2011-04-30_23:30:00", "2011-07-30_23:30:00");    
+    check_next("0 30 23 30 1/3 ?",  "2011-04-30_23:30:00", "2011-07-30_23:30:00");
+    check_next("0 0 1 28 * ?",      "2022-02-28_02:00:00", "2022-03-28_01:00:00");
+    // H Tests
+    cron_init_hash(7);
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-10-03_12:43:49"); // 49 43 12 3 10 ?
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-10-02_12:43:49"); // 49 43 12 ? 10 SUN
+    check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:49");
+    check_next("H 0,12 1 * * ?",    "2022-05-12_01:01:00", "2022-05-12_01:12:49");
+    check_next("H 0,H 1 * * ?",    "2022-05-12_01:01:00", "2022-05-12_01:43:49"); // H = 43
+    check_next("H 0 1/4 * * ?",     "2022-05-12_01:01:00", "2022-05-12_05:00:49");
+    check_next("H H 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:43:49");
+    check_next("H H,H 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:43:49"); // H,H is same as H
+    check_next("0 H/10 1 * * ?",    "2022-05-12_00:00:00", "2022-05-12_01:03:00");
+    check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-07-01_01:00:00");
+    check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
+    check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
+    cron_init_hash(42);
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-03_17:43:54"); // 54 43 17 3 7 ?
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-07-02_17:43:54"); // 54 43 17 ? 7 SAT
+    check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:54");
+    check_next("0 H/10 1 * * ?",    "2022-05-12_00:00:00", "2022-05-12_01:03:00");
+    check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-08-01_01:00:00");
+    check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
+    check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
+    cron_init_hash(54321);
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-04-11_22:34:27"); // 27 34 22 11 4 ?
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-04-01_22:34:27"); // 27 34 22 ? 4 SAT
+    // Tests for a custom hash function
+    cron_custom_hash_fn custom_fn = fake_custom_hash_function;
+    cron_init_custom_hash_fn(custom_fn);
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-02_04:58:34"); // 34 58 4 2 7 ?
+    cron_init_custom_hash_fn(NULL);
+    // W Tests
+    check_next("0 0 1 4W * ?",      "2022-04-12_00:00:00", "2022-05-04_01:00:00");
+    check_next("0 0 1 4W * ?",      "2022-05-12_00:00:00", "2022-06-03_01:00:00");
+    check_next("0 0 1 1W * ?",      "2022-10-01_00:00:00", "2022-10-03_01:00:00");
+    check_next("0 0 1 1W * ?",      "2022-10-03_00:00:00", "2022-10-03_01:00:00");
+    check_next("0 0 1 16W * ?",     "2022-07-16_00:00:00", "2022-08-16_01:00:00");
+    check_next("0 0 1 20W * ?",     "2022-08-20_00:00:00", "2022-09-20_01:00:00");
+    check_next("0 0 1 1W * ?",      "2022-10-03_02:00:00", "2022-11-01_01:00:00");
+    check_next("0 0 1 1W * ?",      "2022-09-01_00:00:00", "2022-09-01_01:00:00");
+    check_next("0 0 1 1,3W * ?",    "2022-09-01_00:00:00", "2022-09-01_01:00:00");
+    check_next("0 0 1 1,3W * ?",    "2022-09-02_00:00:00", "2022-09-02_01:00:00");
+    check_next("0 0 1 1,3W * ?",    "2022-09-03_00:00:00", "2022-10-01_01:00:00");
+    check_next("0 0 1 1,3W * ?",    "2022-10-02_00:00:00", "2022-10-03_01:00:00");
+    check_next("0 0 1 1W,4W * ?",   "2022-09-01_00:00:00", "2022-09-01_01:00:00");
+    check_next("0 0 1 1W,4W * ?",   "2022-09-02_00:00:00", "2022-09-05_01:00:00");
+    check_next("0 0 1 1W,4W * ?",   "2022-06-03_00:00:00", "2022-06-03_01:00:00");
+    check_next("0 0 1 1W,4W * ?",   "2022-09-03_00:00:00", "2022-09-05_01:00:00");
+    check_next("0 0 1 1W,4W * ?",   "2022-10-01_00:00:00", "2022-10-03_01:00:00");
+    check_next("0 0 1 1W,15W * ?",  "2022-09-01_00:00:00", "2022-09-01_01:00:00");
+    check_next("0 0 1 1W,15W * ?",  "2022-10-01_00:00:00", "2022-10-03_01:00:00");
+    check_next("0 0 1 1W,15W * ?",  "2022-09-02_00:00:00", "2022-09-15_01:00:00");
+    check_next("0 0 1 1W,15W * ?",  "2022-01-01_00:00:00", "2022-01-03_01:00:00");
+    check_next("0 0 1 1W,15W * ?",  "2022-01-04_00:00:00", "2022-01-14_01:00:00");
+    check_next("0 0 1 1W,15W * ?",  "2022-01-15_00:00:00", "2022-02-01_01:00:00");
+    check_next("0 0 1 8W,26W * ?",  "2022-01-06_00:00:00", "2022-01-07_01:00:00");
+    check_next("0 0 1 8W,26W * ?",  "2022-01-26_00:00:00", "2022-01-26_01:00:00");
+    check_next("0 0 1 8W,26W * ?",  "2022-02-26_00:00:00", "2022-03-08_01:00:00");
+    check_next("0 0 1 8W,26W * ?",  "2022-03-09_00:00:00", "2022-03-25_01:00:00");
+    check_next("0 0 1 29W * ?",     "2022-02-28_00:00:00", "2022-03-29_01:00:00");
+    check_next("0 0 1 29W * ?",     "2024-02-28_00:00:00", "2024-02-29_01:00:00");
+    check_next("0 0 1 31W * ?",     "2022-02-28_00:00:00", "2022-03-31_01:00:00");
+    check_next("0 0 1 31W * ?",     "2022-06-17_00:00:00", "2022-07-29_01:00:00");
+    check_next("0 0 1 31W * ?",     "2022-07-30_00:00:00", "2022-08-31_01:00:00");
+    check_next("0 0 1 26W * ?",     "2022-06-27_00:00:00", "2022-06-27_01:00:00");
+    check_next("H 0 1 26W * ?",     "2022-06-27_00:00:00", "2022-06-27_01:00:27");
+    check_next("H 0 1 26W */H ?",   "2022-06-27_02:00:00", "2022-09-26_01:00:27");
+    check_next("H 0 1 HW */H ?",    "2022-06-27_02:00:00", "2022-09-12_01:00:27");
+    // L Tests
+    check_next("0 0 1 LW * ?",    "2022-06-22_00:00:00", "2022-06-30_01:00:00");
+    check_next("0 0 1 LW * ?",    "2022-07-01_00:00:00", "2022-07-29_01:00:00");
+    check_next("0 0 1 LW * ?",    "2022-07-29_02:00:00", "2022-08-31_01:00:00");
+    check_next("0 0 1 LW * ?",    "2022-10-01_00:00:00", "2022-10-31_01:00:00");
+    check_next("0 0 1 LW * ?",    "2022-07-31_00:00:00", "2022-08-31_01:00:00");
+    check_next("0 0 1 LW * ?",    "2022-07-30_00:00:00", "2022-08-31_01:00:00");
+    check_next("H 0 H LW * ?",    "2022-10-01_00:00:00", "2022-10-31_22:00:27");
+    check_next("0 0 1 L * ?",     "2022-05-12_00:00:00", "2022-05-31_01:00:00");
+    check_next("0 0 1 L * ?",     "2022-02-12_00:00:00", "2022-02-28_01:00:00");
+    check_next("0 0 1 L * ?",     "2020-02-12_00:00:00", "2020-02-29_01:00:00");
+    check_next("0 0 1 L * ?",     "2021-02-12_00:00:00", "2021-02-28_01:00:00");
+    check_next("0 0 1 ? * L",     "2022-05-12_00:00:00", "2022-05-15_01:00:00");
+    check_next("0 0 1 ? * 4L",    "2022-05-12_00:00:00", "2022-05-26_01:00:00");
+    check_next("0 0 1 ? * 1L",    "2022-03-29_00:00:00", "2022-04-25_01:00:00");
+    check_next("0 0 1 ? * 5L",    "2022-06-25_00:00:00", "2022-07-29_01:00:00");
+    check_next("0 0 1 L-2 * ?",   "2022-05-12_00:00:00", "2022-05-29_01:00:00");
+    check_next("0 0 1 L-3 * ?",   "2020-02-12_00:00:00", "2020-02-26_01:00:00");
+    check_next("0 0 1 L-30 * ?",  "2022-03-01_00:00:00", "2022-03-01_01:00:00");
+    check_next("0 0 1 L-30 * ?",  "2022-01-02_00:00:00", "2022-02-01_01:00:00");
+    check_next("0 0 1 L-31 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00");
+    check_next("0 0 1 L-32 * ?",  "2022-05-12_00:00:00", "2022-06-01_01:00:00");
+    check_next("0 0 1 L-31 2 ?",  "2022-01-01_00:00:00", "2022-02-01_01:00:00");
 }
 
 void test_parse() {
@@ -310,6 +406,8 @@ void test_parse() {
     check_same("* * * * 1-12 *", "* * * * FEB,JAN,MAR,APR,MAY,JUN,JUL,AUG,SEP,OCT,NOV,DEC *");
     check_same("* * * * 2 *", "* * * * Feb *");
     check_same("*  *  * *  1 *", "* * * * 1 *");
+    check_same("* * * * 1 L", "* * * * 1 SUN");
+    check_same("* * * * * *", "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19-59,H 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18-59,H 0,1,2,3,4,5,6,7,8,9,10,11-23,H 1,2,3,4,5,6,7,8,9,10,11,12,13,14-31,H jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec,H mon,tue,wed,thu,fri,sat,sun,H");
 
     check_expr_invalid("77 * * * * *");
     check_expr_invalid("44-77 * * * * *");
@@ -323,6 +421,39 @@ void test_parse() {
     check_expr_invalid("0 0 0 25 0 ?");
     check_expr_invalid("0 0 0 32 12 ?");
     check_expr_invalid("* * * * 11-13 *");
+    check_expr_invalid("0 0 1 1-3W * ?");
+    check_expr_invalid("0 0 1 1/3W * ?");
+    check_expr_invalid("0 0 1 1W/3 * ?");
+    check_expr_invalid("0 0 1 16WL * ?");
+    check_expr_invalid("0 0 1 16LW * ?");
+    check_expr_invalid("0 0 1 W3 * ?");
+    check_expr_invalid("0 0 1 WL * ?");
+    check_expr_invalid("0 0 1 10L * ?");
+    check_expr_invalid("0 0 1 L/7 * ?");
+    check_expr_invalid("0 0 1 HLW * ?");
+    check_expr_invalid("0 0 1 HL/H * ?");
+    check_expr_invalid("0 0 1 HL/HW * ?");
+    check_expr_invalid("0 0 1 ? * 5L,SUN");
+    check_expr_invalid("0 0 1 ? * H/L");
+    check_expr_invalid("0 0 1 ? * 19L");
+    check_expr_invalid("0 0 1 17 * 5L");
+    check_expr_invalid("0 0 1 ? * L-7");
+    check_expr_invalid("0 0 1 ? * 5L-7");
+    check_expr_invalid("0 0 1 5L-7 * ?");
+    check_expr_invalid("0 0 1 L12 * ?");
+    check_expr_invalid("0 0 1 L12- * ?");
+    check_expr_invalid("0 0 1 L1-4 * ?");
+    // H can not be used in ranges
+    check_expr_invalid("H H-H 1 * * ?" ); // H-H Must be error, H can not be used in ranges
+    check_expr_invalid("H H-H 1 * * ?"); // H-60 Must be error, H can not be used in ranges
+    check_expr_invalid("H H-60 1 * * ?"); // H-60 Must be error, H can not be used in ranges
+    check_expr_invalid("H 1-H 1 * * ?"); // H can not be used in ranges
+    check_expr_invalid("1-H 0 1 * * ?"); // H can not be used in ranges
+    check_expr_invalid("1-H 0 1 * * ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1-H * * ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1 1-H * ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1 * 1-H ?"); // H can not be used in ranges
+    check_expr_invalid("0 0 1 ? * 1-H"); // H can not be used in ranges
 }
 
 void test_bits() {
@@ -367,10 +498,10 @@ void test_memory() {
 
     cron_parse_expr("* * * * * *", &cron, &err);
     if (cronAllocations != 0) {
-        printf("Allocations != 0 but %d", cronAllocations);
+        printf("Allocations != 0 but %d\n", cronAllocations);
         assert(0);
     }
-    printf("Allocations: total: %d, max: %d", cronTotalAllocations, maxAlloc);
+    printf("Allocations: total: %d, max: %d\n", cronTotalAllocations, maxAlloc);
 }
 #endif
 

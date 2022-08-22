@@ -63,6 +63,24 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+**2022-08-01**
+
+ * `do_next` finding next trigger date via iteration instead of recursion
+
+**2022-07-19**
+
+ * Support for `H`, `L` and `W` in expressions
+   * `H` (all fields): Is replaced with a pseudo-randomly generated number to allow triggering a task on a unique (per job, device...) time, but also consistent time or offset.
+   * `L` (Day of month (DOM) or Day of week (DOW)):
+     * By itself, means either the last DOM or DOW (=Sunday)
+     * In DOM: Can be followed by an offset (e.g. `-2`) to set the cron for the day x days before the last DOM (here, 2 days before last DOM)
+       * Can also be followed by `W` to set the cron for the last weekday (MON-FRI) of the month
+     * In DOW: If preceded with a weekday (1-7, MON-SUN), sets the cron to the last set day of that month. E.g. `1L` sets the cron for the last monday of the month.
+   * `W` (DOM):
+     * In DOM: Has to be preceded by a day, to set the month for the closest weekday (MON-FRI) to that day. The trigger will not "jump" across months, 
+       e.g. `1W` will trigger on the 2nd if the 1st is a Sunday, and on the 3rd if the 1st is a Saturday.
+
+Explanation in more detail: [http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html](http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html)
 
 **2016-06-17**
 
