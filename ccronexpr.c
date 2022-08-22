@@ -1084,6 +1084,11 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
     sprintf(value_str, "%d", value);
     newField = str_replace(field, "H", value_str);
 
+    if (!newField) {
+        *error = "Error allocating newField";
+        return field;
+    }
+
     cronFree(field);
     return newField;
 
