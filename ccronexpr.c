@@ -482,18 +482,17 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
 }
 
 /**
- * Set the next appropriate day of month on which the cron could trigger.
+ * If 'L' is present in DOM or DOW, set the next appropriate day of month on which the cron could trigger. (Handles W for DOM as well, if the field is 'LW')
  * @param calendar Pointer to a struct tm, which holds the currently calculated trigger time
  * @param days_of_month Pointer to parsed day of month field from the cron expression
  * @param day_of_month Day of month from which the do_next function started. (Should be equal to calendar->tm_mday on function call and exit.)
  * @param day_of_week Weekday from which the do_next function started. (Should be equal to calendar->tm_wday on function call and exit.)
- * @param l_flags Set L flags: Is L present
- * @param w_flags Set W flags: See if W flag for 'L' (32nd bit) is set
+ * @param lw_flags Present L(W) flags: Is L(W) in DOM, or L in DOW present
  * @param reset_fields Array which specifies which fields need to be reset, if the appropriate day of month is different from the start date.
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month, int day_of_month, uint8_t* days_of_week, uint8_t l_flags, uint8_t* reset_fields, int* res_out)
+static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, int day_of_month, uint8_t* days_of_week, uint8_t lw_flags, uint8_t* reset_fields, int* res_out)
 {
     int err;
     unsigned int count = 0;
@@ -502,7 +501,7 @@ static unsigned int handle_lw_flags(struct tm* calendar, uint8_t* days_of_month,
     int startday = calendar->tm_mday;
     int startmonth = calendar->tm_mon;
 
-    switch (l_flags) {
+    switch (lw_flags) {
         case L_DOW_FLAG: {
             // L with day in DOW
             int searched_weekday = next_set_bit(days_of_week, 8, 0, res_out);
@@ -718,12 +717,13 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
     unsigned int count = 0;
     int notfound = 0;
     const unsigned int max = 366;
-    if (l_flags) { // Adapt finding of next day: W should be nearest weekday to set dom, with L last weekday of month; in dow last x-day (Friday, Saturday, ...) of month
-        day_of_month = handle_lw_flags(calendar, days_of_month, day_of_month, days_of_week, l_flags, reset_fields, res_out);
+    if (l_flags) {
+        day_of_month = handle_l_flag(calendar, days_of_month, day_of_month, days_of_week, l_flags, reset_fields,
+                                     res_out);
         if (*res_out) goto return_error;
     }
     else {
-        next_set_bit(w_flags, CRON_MAX_DAYS_OF_MONTH , 0, &notfound); // LW is handled in handle_lw_flags
+        next_set_bit(w_flags, CRON_MAX_DAYS_OF_MONTH , 0, &notfound); // check for W day presence; LW is handled in handle_l_flag
         if (notfound) {
             while ((!cron_getBit(days_of_month, day_of_month) || !cron_getBit(days_of_week, day_of_week)) &&
                    count++ < max) {
@@ -774,6 +774,8 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     int update_day_of_month = 0;
     int month = 0;
     int update_month = 0;
+    // L flags for DOM and DOW, or LW for DOM
+    uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
 
     while (reset_fields) {
         second = calendar->tm_sec;
@@ -808,8 +810,6 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         day_of_week = calendar->tm_wday;
         day_of_month = calendar->tm_mday;
         month = calendar->tm_mon;
-        // L & W parameters
-        uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
 
         if (cron_getBit(expr->w_flags, 0)) {
             lw_flags |= W_DOM_FLAG; // for LW
