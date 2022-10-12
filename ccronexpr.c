@@ -1187,6 +1187,15 @@ uint8_t cron_getBit(uint8_t* rbyte, int idx) {
 
 }
 
+/**
+ * Set bits in cron_expr field target, depending on value, and only in the range of [min:max[
+ *
+ * @param value String of field which needs to be parsed into set bits in cron_expr
+ * @param target cron_expr field looking to be filled
+ * @param min Min possible value for current field
+ * @param max Max possible value for current field, not included in interval
+ * @param error String output of error, if one occured
+ */
 void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsigned int max, const char** error) {
     size_t i;
     unsigned int i1;
@@ -1241,6 +1250,12 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
             unsigned int delta = parse_uint(split[1], &err);
             if (err) {
                 *error = "Unsigned integer parse error 4";
+                cronFree(range);
+                free_splitted(split, len2);
+                goto return_result;
+            }
+            if (delta >= max) {
+                *error = "Incrementer too big";
                 cronFree(range);
                 free_splitted(split, len2);
                 goto return_result;
