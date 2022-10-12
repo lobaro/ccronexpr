@@ -454,6 +454,14 @@ void test_parse() {
     check_expr_invalid("0 0 1 1-H * ?"); // H can not be used in ranges
     check_expr_invalid("0 0 1 * 1-H ?"); // H can not be used in ranges
     check_expr_invalid("0 0 1 ? * 1-H"); // H can not be used in ranges
+    // Invalid iterator values
+    check_expr_invalid("0/60 * * * * *");
+    check_expr_invalid("0/61 * * * * *");
+    check_expr_invalid("* 0/60 * * * *");
+    check_expr_invalid("* * 0/24 * * *");
+    check_expr_invalid("* * * 1/32 * *");
+    check_expr_invalid("* * * * 1/13 *");
+    check_expr_invalid("* * * * * 1/8");
 }
 
 void test_bits() {
