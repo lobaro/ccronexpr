@@ -461,6 +461,7 @@ void test_parse() {
     check_expr_invalid("* * * 1/32 * *");
     check_expr_invalid("* * * * 1/13 *");
     check_expr_invalid("* * * * * 1/8");
+    check_expr_invalid("* * * * * 1/-1");
 }
 
 void test_bits() {

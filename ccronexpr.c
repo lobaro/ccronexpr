@@ -1322,7 +1322,6 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
 static void set_months(char* value, uint8_t* targ, const char** error) {
     int err;
     unsigned int i;
-    unsigned int max = 12;
 
     char* replaced = NULL;
 
@@ -1336,11 +1335,11 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
         return;
     }
 
-    set_number_hits(replaced, targ, 1, max + 1, error);
+    set_number_hits(replaced, targ, 1, CRON_MAX_MONTHS + 1, error);
     cronFree(replaced);
 
     /* ... and then rotate it to the front of the months */
-    for (i = 1; i <= max; i++) {
+    for (i = 1; i <= CRON_MAX_MONTHS; i++) {
         if (cron_getBit(targ, i)) {
             cron_setBit(targ, i - 1);
             cron_delBit(targ, i);
@@ -1529,17 +1528,17 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
 
     fields[0] = check_and_replace_h(fields[0], 0, 0, error);
     if (*error) goto return_res;
-    set_number_hits(fields[0], target->seconds, 0, 60, error);
+    set_number_hits(fields[0], target->seconds, 0, CRON_MAX_SECONDS, error);
     if (*error) goto return_res;
 
     fields[1] = check_and_replace_h(fields[1], 1, 0, error);
     if (*error) goto return_res;
-    set_number_hits(fields[1], target->minutes, 0, 60, error);
+    set_number_hits(fields[1], target->minutes, 0, CRON_MAX_MINUTES, error);
     if (*error) goto return_res;
 
     fields[2] = check_and_replace_h(fields[2], 2, 0, error);
     if (*error) goto return_res;
-    set_number_hits(fields[2], target->hours, 0, 24, error);
+    set_number_hits(fields[2], target->hours, 0, CRON_MAX_HOURS, error);
     if (*error) goto return_res;
 
     to_upper(fields[5]);
@@ -1550,7 +1549,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         goto return_res;
     }
     l_check(days_replaced, 5, NULL, target, error);
-    set_days(days_replaced, target->days_of_week, 8, error);
+    set_days(days_replaced, target->days_of_week, CRON_MAX_DAYS_OF_WEEK, error);
     cronFree(days_replaced);
     if (*error) goto return_res;
     if (cron_getBit(target->days_of_week, 7)) {
