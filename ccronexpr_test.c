@@ -228,16 +228,13 @@ void check_expr_invalid(const char* expr) {
     }
 }
 
+int testing_hash_function(int seed, uint8_t idx) {
+    return seed * idx;
+}
+
 int fake_custom_hash_function(int seed, uint8_t idx)
 {
-    int newSeed = rand();
-    int val;
-    srand(seed);
-    for (int i = 0; i <= idx+1; i++) { // iterates 1 time more than default function
-        val = rand();
-    }
-    srand(newSeed);
-    return val;
+    return seed * (idx + 1);
 }
 
 void test_expr() {
@@ -302,36 +299,41 @@ void test_expr() {
     check_next("0 30 23 30 1/3 ?",  "2011-01-30_23:30:00", "2011-04-30_23:30:00");
     check_next("0 30 23 30 1/3 ?",  "2011-04-30_23:30:00", "2011-07-30_23:30:00");
     check_next("0 0 1 28 * ?",      "2022-02-28_02:00:00", "2022-03-28_01:00:00");
+    check_next("0 0 0 * 12 ?",      "2022-01-01_00:00:00", "2022-12-01_00:00:00");
     // H Tests
+    cron_init_custom_hash_fn(testing_hash_function);
     cron_init_hash(7);
-    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-10-03_12:43:49"); // 49 43 12 3 10 ?
-    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-10-02_12:43:49"); // 49 43 12 ? 10 SUN
-    check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:49");
-    check_next("H 0,12 1 * * ?",    "2022-05-12_01:01:00", "2022-05-12_01:12:49");
-    check_next("H 0,H 1 * * ?",    "2022-05-12_01:01:00", "2022-05-12_01:43:49"); // H = 43
-    check_next("H 0 1/4 * * ?",     "2022-05-12_01:01:00", "2022-05-12_05:00:49");
-    check_next("H H 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:43:49");
-    check_next("H H,H 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:43:49"); // H,H is same as H
-    check_next("0 H/10 1 * * ?",    "2022-05-12_00:00:00", "2022-05-12_01:03:00");
-    check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-07-01_01:00:00");
-    check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
-    check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-05-22_14:07:00"); // 0 7 14 22 5 (1)
+    check_next("H H H H H ?",       "2022-06-12_00:00:00", "2023-05-22_14:07:00");
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-05-16_14:07:00");
+    check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:00");
+    check_next("H 0,12 1 * * ?",    "2022-05-12_01:01:00", "2022-05-12_01:12:00");
+    check_next("H 0,H 1 * * ?",     "2022-05-12_01:01:00", "2022-05-12_01:07:00");
+    check_next("H 0 1/4 * * ?",     "2022-05-12_01:01:00", "2022-05-12_05:00:00");
+    check_next("H H 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:07:00");
+    check_next("H H,H 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:07:00"); // H,H is same as H
+    check_next("0 H/5 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:02:00");
+    check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-06-01_01:00:00");
+    check_next("0 0 1 1 H/MAY ?",   "2022-06-12_00:00:00", "2022-11-01_01:00:00");
+    // TODO: Fix issue if generating iterator: Needs to be above 0?
+    //check_next("0/H 0 1 * * *",     "2022-05-18_01:00:01", "2022-05-18_01:00:02");
     cron_init_hash(42);
-    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-03_17:43:54"); // 54 43 17 3 7 ?
-    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2022-07-02_17:43:54"); // 54 43 17 ? 7 SAT
-    check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:54");
-    check_next("0 H/10 1 * * ?",    "2022-05-12_00:00:00", "2022-05-12_01:03:00");
-    check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-08-01_01:00:00");
-    check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
-    check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-24_01:00:00");
-    cron_init_hash(54321);
-    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-04-11_22:34:27"); // 27 34 22 11 4 ?
-    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-04-01_22:34:27"); // 27 34 22 ? 4 SAT
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-01-19_12:42:00"); // 0 42 12(84) 19(126) 1(168) 1(210)
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-01-02_12:42:00");
+    check_next("H 0 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:00:00");
+    check_next("0 H/10 1 * * ?",    "2022-05-12_00:00:00", "2022-05-12_01:02:00");
+    check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-06-01_01:00:00");
+    cron_init_hash(12);
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-01-10_00:12:00"); // 0 12 0 10 1 4
+    check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-01-05_00:12:00");
     // Tests for a custom hash function
     cron_custom_hash_fn custom_fn = fake_custom_hash_function;
     cron_init_custom_hash_fn(custom_fn);
-    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-02_04:58:34"); // 34 58 4 2 7 ?
-    cron_init_custom_hash_fn(NULL);
+    // TODO: Edit/check H values here
+    check_next("H H H H H ?",       "2022-05-12_00:00:00", "2022-07-02_04:58:34"); // 7 14 21 2 3 0
+    check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00");
+    check_next("0 0 1 ? * TUE/H",   "2022-05-18_00:00:00", "2022-05-18_01:00:00");
+    cron_init_custom_hash_fn(testing_hash_function);
     // W Tests
     check_next("0 0 1 4W * ?",      "2022-04-12_00:00:00", "2022-05-04_01:00:00");
     check_next("0 0 1 4W * ?",      "2022-05-12_00:00:00", "2022-06-03_01:00:00");
@@ -408,6 +410,12 @@ void test_parse() {
     check_same("*  *  * *  1 *", "* * * * 1 *");
     check_same("* * * * 1 L", "* * * * 1 SUN");
     check_same("* * * * * *", "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19-59,H 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18-59,H 0,1,2,3,4,5,6,7,8,9,10,11-23,H 1,2,3,4,5,6,7,8,9,10,11,12,13,14-31,H jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec,H mon,tue,wed,thu,fri,sat,sun,H");
+    // check default hash func
+    // TODO: Implement check for valid expression
+    /*cron_init_custom_hash_fn(NULL);
+    check_expr_valid("H H H H H ?");
+    check_expr_valid("H H H ? H H");
+    cron_init_custom_hash_fn(testing_hash_function)*/
 
     check_expr_invalid("77 * * * * *");
     check_expr_invalid("44-77 * * * * *");
