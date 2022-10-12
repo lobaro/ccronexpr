@@ -511,6 +511,8 @@ void test_memory() {
     }
     printf("Allocations: total: %d, max: %d\n", cronTotalAllocations, maxAlloc);
 }
+// TODO: Add test for non-nulled cron_expr
+// TODO: Add tests for empty expressions if only unused bits are set
 #endif
 
 int main() {

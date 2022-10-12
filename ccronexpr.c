@@ -35,7 +35,7 @@
 #define CRON_MAX_HOURS 24
 #define CRON_MAX_DAYS_OF_WEEK 8
 #define CRON_MAX_DAYS_OF_MONTH 32
-#define CRON_MAX_MONTHS 12
+#define CRON_MAX_MONTHS 13
 
 
 // Bit 0...11 = Month
@@ -831,8 +831,8 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         }
 
         month = calendar->tm_mon; /*day already adds one if no day in same month is found*/
-        update_month = find_next(expr->months, CRON_MAX_MONTHS, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, &reset_fields,
-                                 &res);
+        update_month = find_next(expr->months, CRON_MAX_MONTHS-1, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, &reset_fields,
+                                 &res); // max-1 because month bits are only set from 0 to 11
         if (0 != res) goto return_result;
         if (month != update_month) {
             if (calendar->tm_year - dot > 4) {
@@ -1335,11 +1335,11 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
         return;
     }
 
-    set_number_hits(replaced, targ, 1, CRON_MAX_MONTHS + 1, error);
+    set_number_hits(replaced, targ, 1, CRON_MAX_MONTHS, error);
     cronFree(replaced);
 
     /* ... and then rotate it to the front of the months */
-    for (i = 1; i <= CRON_MAX_MONTHS; i++) {
+    for (i = 1; i < CRON_MAX_MONTHS; i++) {
         if (cron_getBit(targ, i)) {
             cron_setBit(targ, i - 1);
             cron_delBit(targ, i);
