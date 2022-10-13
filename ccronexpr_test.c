@@ -424,6 +424,9 @@ void test_parse() {
     check_expr_valid("H H H H H ?");
     check_expr_valid("H H H ? H H");
     check_expr_valid("H H H,H ? H H");
+    check_expr_valid("H H H/2 ? H H");
+    check_expr_valid("H H H(0-12) ? H H");
+    check_expr_valid("H H H ? H(1-17) H");
     cron_init_custom_hash_fn(testing_hash_function);
 
     check_expr_invalid("77 * * * * *");
@@ -480,6 +483,9 @@ void test_parse() {
     check_expr_invalid("* * * * * 1/8");
     check_expr_invalid("* * * * * 1/-1");
     check_expr_invalid("H H H */H H *");
+    check_expr_invalid("H H H H(0-39) H *");
+    check_expr_invalid("H(5-69) H H H H *");
+    check_expr_invalid("H H H * H(0-8) *");
 }
 
 void test_bits() {
