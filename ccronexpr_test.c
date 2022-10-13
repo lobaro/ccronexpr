@@ -223,8 +223,20 @@ void check_expr_invalid(const char* expr) {
     memset(&test, 0, sizeof(test));
     cron_parse_expr(expr, &test, &err);
     if (!err) {
-        printf("Error: '%s' parsed without an error\n", expr);
+        printf("Error: '%s' parsed without an error (but it should)\n", expr);
         assert(err);
+        memset(&test, 0, sizeof(test));
+    }
+}
+
+void check_expr_valid(const char* expr) {
+    const char* err = NULL;
+    cron_expr test;
+    cron_parse_expr(expr, &test, &err);
+    if (err) {
+        printf("Error: '%s' parsed with an error\n", expr);
+        assert(err);
+        memset(&test, 0, sizeof(test));
     }
 }
 
@@ -409,12 +421,15 @@ void test_parse() {
     check_same("*  *  * *  1 *", "* * * * 1 *");
     check_same("* * * * 1 L", "* * * * 1 SUN");
     check_same("* * * * * *", "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19-59,H 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18-59,H 0,1,2,3,4,5,6,7,8,9,10,11-23,H 1,2,3,4,5,6,7,8,9,10,11,12,13,14-31,H jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec,H mon,tue,wed,thu,fri,sat,sun,H");
-    // check default hash func
-    // TODO: Implement check for valid expression
-    /*cron_init_custom_hash_fn(NULL);
+    // check default hash func has valid output
+    cron_init_custom_hash_fn(NULL);
+    check_expr_valid("0 0 1 * * ?");
     check_expr_valid("H H H H H ?");
     check_expr_valid("H H H ? H H");
-    cron_init_custom_hash_fn(testing_hash_function)*/
+    check_expr_valid("H H H,H ? H H");
+    check_expr_valid("H H H */H H *");
+    check_expr_valid("H H H 3/H H *");
+    cron_init_custom_hash_fn(testing_hash_function);
 
     check_expr_invalid("77 * * * * *");
     check_expr_invalid("44-77 * * * * *");
