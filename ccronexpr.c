@@ -1287,6 +1287,10 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
                 return field;
             }
         }
+        if ( (has_h != field) && (*(has_h-1) == '/') ) { /* H not allowed as iterator */
+            *error = "Hashed: 'H' not allowed as iterator";
+            return field;
+        }
         if ( *(has_h+1) =='-' || \
         ( has_h != field && *(has_h-1) == '-') ) { // 'H' not starting field, so may be the end of a range
             *error = "'H' is not allowed for use in ranges";
