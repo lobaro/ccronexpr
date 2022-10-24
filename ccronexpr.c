@@ -1277,11 +1277,11 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 
 static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min, const char** error)
 {
-    unsigned int local_max = 0;
+    unsigned int local_max = 0, minBuf = 0, maxBuf = 0;
     char* has_h = strchr(field, 'H');
     if (has_h) {
         if ( *(has_h+1) == '/') { /* H before an iterator */
-            sscanf(has_h, "H/%2d", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
+            sscanf(has_h, "H/%2u", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
             if (!local_max) { /* iterator might have been specified as an ordinal instead... */
                 *error = "Hashed: Iterator error";
                 return field;
@@ -1295,6 +1295,18 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
         ( has_h != field && *(has_h-1) == '-') ) { // 'H' not starting field, so may be the end of a range
             *error = "'H' is not allowed for use in ranges";
             return field;
+        }
+        // Test if custom Range is specified
+        if ( *(has_h+1) == '(' ) {
+            sscanf(has_h, "H(%2u-%2u)", &minBuf, &maxBuf);
+            if ( !maxBuf || \
+                (minBuf > maxBuf) || \
+                (minBuf < min) || \
+                (maxBuf > local_max) // TODO: Determine max value for field beforehand? Or after?
+            ) {
+            // set error, return original field
+            ;
+        }
         }
         switch (pos) {
             case CRON_FIELD_SECOND:
