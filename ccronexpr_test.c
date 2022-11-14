@@ -172,7 +172,6 @@ struct tm* poors_mans_strptime(const char* str) {
 void check_next(const char* pattern, const char* initial, const char* expected) {
     const char* err = NULL;
     cron_expr parsed;
-    memset(&parsed, 0, sizeof(parsed));
     cron_parse_expr(pattern, &parsed, &err);
     if (err) printf("Error: %s\nPattern: %s\n", err, pattern);
 
@@ -198,17 +197,14 @@ void check_next(const char* pattern, const char* initial, const char* expected) 
 
 void check_same(const char* expr1, const char* expr2) {
     cron_expr parsed1;
-    memset(&parsed1, 0, sizeof(parsed1));
     cron_parse_expr(expr1, &parsed1, NULL);
     cron_expr parsed2;
-    memset(&parsed2, 0, sizeof(parsed2));
     cron_parse_expr(expr2, &parsed2, NULL);
     assert(crons_equal(&parsed1, &parsed2));
 }
 
 void check_calc_invalid() {
     cron_expr parsed;
-    memset(&parsed, 0, sizeof(parsed));
     cron_parse_expr("0 0 0 31 6 *", &parsed, NULL);
     struct tm * calinit = poors_mans_strptime("2012-07-01_09:53:50");
     time_t dateinit = timegm(calinit);
@@ -220,12 +216,10 @@ void check_calc_invalid() {
 void check_expr_invalid(const char* expr) {
     const char* err = NULL;
     cron_expr test;
-    memset(&test, 0, sizeof(test));
     cron_parse_expr(expr, &test, &err);
     if (!err) {
         printf("Error: '%s' parsed without an error (but it should)\n", expr);
         assert(err);
-        memset(&test, 0, sizeof(test));
     }
 }
 
@@ -234,9 +228,7 @@ void check_expr_valid(const char* expr) {
     cron_expr test;
     cron_parse_expr(expr, &test, &err);
     if (err) {
-        printf("Error: '%s' parsed with an error\n", expr);
-        assert(err);
-        memset(&test, 0, sizeof(test));
+        printf("Error: '%s' parsed with an error: %s\n", expr, err);
     }
 }
 
@@ -535,7 +527,6 @@ void test_memory() {
     }
     printf("Allocations: total: %d, max: %d\n", cronTotalAllocations, maxAlloc);
 }
-// TODO: Add test for non-nulled cron_expr
 // TODO: Add tests for empty expressions if only unused bits are set
 #endif
 

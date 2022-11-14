@@ -1536,6 +1536,12 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         goto return_res;
     }
 
+    if (!target) {
+        *error = "Invalid target";
+        goto return_res;
+    }
+    memset(target, 0, sizeof(*target));
+
     fields = split_str(expression, ' ', &len);
     if (len != 6) {
         *error = "Invalid number of fields, expression must consist of 6 fields";
