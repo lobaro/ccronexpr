@@ -1056,6 +1056,10 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
     unsigned int i = 0;
     int value;
     char *newField = NULL;
+    // needed when a custom range is detected and removed
+    char customRemover[8];
+    char innerString[6];
+    char *oldField = field;
 
     if (!has_char(field, 'H')) {
         *error = "No H to replace in field";
@@ -1078,6 +1082,14 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
     value %= max-min;
     // and above min
     value += min;
+
+    // Check if a custom range is present, and get rid of it
+    if ( has_char(field, '(') ) {
+        sscanf(field, "H(%5[-0123456789])", innerString);
+        sprintf(customRemover, "(%s)", innerString);
+        field = str_replace(field, customRemover, NULL);
+        cronFree(oldField);
+    }
 
     // Create string
     char value_str[3];
@@ -1277,12 +1289,14 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 
 static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min, const char** error)
 {
-    unsigned int local_max = 0, minBuf = 0, maxBuf = 0;
+    unsigned int fieldMax = 0, customMax = 0;
+    // minBuf is 0xFF to see if it has been altered/read successfully, since 0 is a valid value for it
+    unsigned int minBuf = 0xFF, maxBuf = 0;
     char* has_h = strchr(field, 'H');
     if (has_h) {
         if ( *(has_h+1) == '/') { /* H before an iterator */
-            sscanf(has_h, "H/%2u", &local_max); // get value of iterator, so it will be used as maximum instead of standard maximum for field
-            if (!local_max) { /* iterator might have been specified as an ordinal instead... */
+            sscanf(has_h, "H/%2u", &customMax); // get value of iterator, so it will be used as maximum instead of standard maximum for field
+            if (!customMax) { /* iterator might have been specified as an ordinal instead... */
                 *error = "Hashed: Iterator error";
                 return field;
             }
@@ -1300,37 +1314,50 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
         if ( *(has_h+1) == '(' ) {
             sscanf(has_h, "H(%2u-%2u)", &minBuf, &maxBuf);
             if ( !maxBuf || \
+                (minBuf == 0xFF) || \
                 (minBuf > maxBuf) || \
                 (minBuf < min) || \
-                (maxBuf > local_max) // TODO: Determine max value for field beforehand? Or after?
+                // if a customMax is present: Is read maximum bigger than it? (which it shouldn't be)
+                (customMax ? maxBuf > customMax : 0)
             ) {
-            // set error, return original field
-            ;
-        }
+                *error = "'H' custom range error";
+                return field;
+            }
+            min = minBuf;
+            // maxBuf needs to be incremented by 1 to include it
+            customMax = maxBuf + 1;
         }
         switch (pos) {
             case CRON_FIELD_SECOND:
-                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_SECONDS, fn, error);
+                fieldMax = CRON_MAX_SECONDS;
                 break;
             case CRON_FIELD_MINUTE:
-                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_MINUTES, fn, error);
+                fieldMax = CRON_MAX_MINUTES;
                 break;
             case CRON_FIELD_HOUR:
-                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_HOURS, fn, error);
+                fieldMax = CRON_MAX_HOURS;
                 break;
             case CRON_FIELD_DAY_OF_MONTH:
-                field = replace_hashed(field, pos, min, local_max ? local_max : 28, fn, error); // limited to 28th so the hashed cron will be executed every month
+                // limited to 28th so the hashed cron will be executed every month
+                fieldMax = 28;
                 break;
             case CRON_FIELD_MONTH:
-                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_MONTHS, fn, error);
+                fieldMax = CRON_MAX_MONTHS;
                 break;
             case CRON_FIELD_DAY_OF_WEEK:
-                field = replace_hashed(field, pos, min, local_max ? local_max : CRON_MAX_DAYS_OF_WEEK, fn, error);
+                fieldMax = CRON_MAX_DAYS_OF_WEEK;
                 break;
             default:
                 *error = "Unknown field!";
                 return field;
         }
+        if (!customMax) {
+            customMax = fieldMax;
+        } else if (customMax > fieldMax) {
+            *error = "'H' range maximum error";
+            return field;
+        }
+        field = replace_hashed(field, pos, min, customMax, fn, error);
     }
     return field;
 }
