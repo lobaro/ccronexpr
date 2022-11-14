@@ -173,7 +173,10 @@ void check_next(const char* pattern, const char* initial, const char* expected) 
     const char* err = NULL;
     cron_expr parsed;
     cron_parse_expr(pattern, &parsed, &err);
-    if (err) printf("Error: %s\nPattern: %s\n", err, pattern);
+    if (err) {
+        printf("Error: %s\nPattern: %s\n", err, pattern);
+        assert(0);
+    }
 
     struct tm* calinit = poors_mans_strptime(initial);
     time_t dateinit = timegm(calinit);
@@ -315,10 +318,18 @@ void test_expr() {
     check_next("H 0,H 1 * * ?",     "2022-05-12_01:01:00", "2022-05-12_01:07:00");
     check_next("H 0 1/4 * * ?",     "2022-05-12_01:01:00", "2022-05-12_05:00:00");
     check_next("H H 1 * * ?",       "2022-05-12_00:00:00", "2022-05-12_01:07:00");
-    check_next("H H,H 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:07:00"); // H,H is same as H
+    // H,H is same as H
+    check_next("H H,H 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:07:00");
     check_next("0 H/5 1 * * ?",     "2022-05-12_00:00:00", "2022-05-12_01:02:00");
     check_next("0 0 1 1 H/MAY ?",   "2022-05-12_00:00:00", "2022-06-01_01:00:00");
     check_next("0 0 1 1 H/MAY ?",   "2022-06-12_00:00:00", "2022-11-01_01:00:00");
+    // Tests for H in custom range
+    check_next("0 H(0-5) 1 1 * ?",  "2022-06-12_00:00:00", "2022-07-01_01:01:00"); // 0 1 1 1 * *
+    check_next("0 0 1 H(1-9)W * ?","2022-06-12_00:00:00", "2022-07-04_01:00:00"); // Day is 4
+    check_next("0 0 1 H(1-9)W * ?","2022-06-01_00:00:00", "2022-06-03_01:00:00");
+    // TODO: Decide whether H should be available as an offset for 'L' in DOM field (L-H)
+    check_next("0 0 1 ? * HL",      "2022-06-12_00:00:00", "2022-06-27_01:00:00");
+    check_next("0 0 1 ? * H(1-6)L", "2022-06-12_00:00:00", "2022-06-25_01:00:00");
     cron_init_hash(42);
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-01-19_12:42:00"); // 0 42 12(84) 19(126) 1(168) 1(210)
     check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-01-02_12:42:00");
@@ -414,11 +425,12 @@ void test_parse() {
     cron_init_custom_hash_fn(NULL);
     check_expr_valid("0 0 1 * * ?");
     check_expr_valid("H H H H H ?");
+    check_expr_valid("H(0-59) H H H H ?");
     check_expr_valid("H H H ? H H");
     check_expr_valid("H H H,H ? H H");
     check_expr_valid("H H H/2 ? H H");
     check_expr_valid("H H H(0-12) ? H H");
-    check_expr_valid("H H H ? H(1-17) H");
+    check_expr_valid("H H H H(1-17) H ?");
     cron_init_custom_hash_fn(testing_hash_function);
 
     check_expr_invalid("77 * * * * *");
@@ -476,7 +488,16 @@ void test_parse() {
     check_expr_invalid("* * * * * 1/-1");
     check_expr_invalid("H H H */H H *");
     check_expr_invalid("H H H H(0-39) H *");
+    check_expr_invalid("H(0-60) H H H H *");
     check_expr_invalid("H(5-69) H H H H *");
+    check_expr_invalid("H(11-6) H H H H *");
+    check_expr_invalid("H H(17-93) H H H *");
+    check_expr_invalid("H H H(0-25) H H *");
+    check_expr_invalid("H H H H(0-12) H *");
+    check_expr_invalid("H H H H H(0-2) *");
+    check_expr_invalid("H H H * H H(0-9)");
+    check_expr_invalid("H(5-o) H H H H *");
+    check_expr_invalid("H(o-10) H H H H *");
     check_expr_invalid("H H H * H(0-8) *");
 }
 
