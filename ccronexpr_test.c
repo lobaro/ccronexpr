@@ -546,6 +546,65 @@ void test_bits() {
     assert(!err);
 }
 
+/// Test if non-empty cron_expr will still result in the desired cron_expr
+void test_invalid_bits(void)
+{
+    cron_expr expr;
+    const char *err = NULL;
+    time_t res;
+    struct tm *errortime;
+    char buffer[21];
+
+    // Test if non-zeroed cron_expr contains "old" bits after parsing
+    cron_setBit(expr.seconds, 27);
+    cron_parse_expr("0 * * * * *", &expr, &err);
+    if (!cron_getBit(expr.seconds, 0) || err) {
+        printf("Error: Non-zeroed cron_expr wasn't parsed properly\n");
+        if (err) printf("%s\n", err);
+        assert(0);
+    } else if (cron_getBit(expr.seconds, 27)) {
+        printf("Error: Non-zeroed cron_expr still has invalid bit\n");
+        if (err) printf("%s\n", err);
+        assert(0);
+    }
+
+    // Test only unused bits in expr
+    memset(&expr, 0, sizeof expr);
+    expr.seconds[7] = 0xF0;
+    expr.minutes[7] = 0xF0;
+    // all hour bits are used
+    expr.days_of_month[0] = 0x01;
+    expr.months[2] = 0x80;
+    expr.days_of_week[0] = 0x01;
+
+    struct tm * calinit = poors_mans_strptime("2012-07-01_09:53:50");
+    time_t dateinit = timegm(calinit);
+    res = cron_next(&expr, dateinit);
+    if (res != -1) {
+        printf("Error: Empty cron (only unused bits) found next trigger date successfully\n");
+        errortime = gmtime(&res);
+        strftime(buffer, 20, DATE_FORMAT, errortime);
+        printf("%s\n", buffer);
+        assert(0);
+    }
+    free(calinit);
+    // Test only flags in expr
+    memset(&expr, 0, sizeof expr);
+    expr.months[2] = 0x60;
+    calinit = poors_mans_strptime("2012-07-01_09:53:50");
+    dateinit = timegm(calinit);
+    res = cron_next(&expr, dateinit);
+    if (res != -1) {
+        printf("Error: Empty cron (only flags) found next trigger date successfully\n");
+        errortime = gmtime(&res);
+        strftime(buffer, 20, DATE_FORMAT, errortime);
+        printf("%s\n", buffer);
+        assert(0);
+    }
+    free(calinit);
+
+}
+
 /* For this test to work you need to set "-DCRON_TEST_MALLOC=1"*/
 #ifdef CRON_TEST_MALLOC
 void test_memory() {
@@ -569,6 +628,7 @@ int main() {
     test_expr();
     test_parse();
     check_calc_invalid();
+    test_invalid_bits();
     #ifdef CRON_TEST_MALLOC
     test_memory(); /* For this test to work you need to set "-DCRON_TEST_MALLOC=1"*/
     #endif
