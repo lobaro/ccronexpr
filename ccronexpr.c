@@ -369,9 +369,9 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
         next_value = next_set_bit(bits, max, 0, &notfound);
     }
     if (notfound || next_value != value) {
-        err = set_field(calendar, field, next_value);
-        if (err) goto return_error;
         err = reset_all(calendar, reset_fields);
+        if (err) goto return_error;
+        err = set_field(calendar, field, next_value);
         if (err) goto return_error;
     }
     return next_value;
@@ -1206,7 +1206,7 @@ uint8_t cron_getBit(uint8_t* rbyte, int idx) {
  * @param target cron_expr field looking to be filled
  * @param min Min possible value for current field
  * @param max Max possible value for current field, not included in interval
- * @param error String output of error, if one occured
+ * @param error String output of error, if one occurred
  */
 void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsigned int max, const char** error) {
     size_t i;
