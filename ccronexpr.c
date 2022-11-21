@@ -395,29 +395,51 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
 {
     int err;
     unsigned int count = 0;
-    unsigned int desired_day;
+    unsigned int desired_day, loopday;
     int notfound = 0;
     const unsigned int max = 366;
 
     int startday = calendar->tm_mday;
     int startmonth = calendar->tm_mon;
 
+    // TODO: Handle LW in this function, so it can be used together with other W flags
     for (unsigned int loop = 0; loop < max; loop++) {
-        // First: Check if current day is a weekday option for a w_flag day up to 2 days earlier
-        desired_day = next_set_bit(w_flags, day_of_month + 1, day_of_month - 2, &notfound);
+        loopday = calendar->tm_mday;
+        // First: Check for w_flags up to 2 days earlier,
+        desired_day = next_set_bit(w_flags, day_of_month, day_of_month - 2, &notfound);
         if (!notfound) {
             // Check first which day is the "desired" day (xxW):
             // - Is current day a Monday?
-            //   - If yes, is desired day only one day before current day, or is it the 1st of month and current day the 3rd?
-            if (calendar->tm_wday == 1 && \
-                ((calendar->tm_mday - desired_day == 1) || ((desired_day == 1) && (calendar->tm_mday == 3)))) {
-                // Great! The current day is the next trigger day and can be returned.
-                if ((startday != day_of_month) || (startmonth != calendar->tm_mon)) {
-                    reset_all(calendar, reset_fields);
+            //   - If yes, is desired day only one day before current day?
+            // - Or is desired day the 1st?
+            //      - Is the first a Saturday? Then go to next following workday, the 3rd
+            if (calendar->tm_wday == 1) {
+                if (cron_getBit(w_flags, calendar->tm_mday - 1)) {
+                    // Great! The current day is the next trigger day and can be returned.
+                    day_of_month = calendar->tm_mday;
+                    break;
                 }
-                return day_of_month;
+            }
+            if (desired_day == 1) {
+                // Original day in loopday; check if 1st is not a working day
+                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+                if (err) {
+                    *res_out = 1;
+                    return 0;
+                }
+                if ( calendar->tm_wday == 6) {
+                    // Go 2 days forward for SAT (6); SUN is handled by the 1st case
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 2);
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    day_of_month = calendar->tm_mday;
+                    break;
+                }
             }
         }
+        // Else:
         // Step forward until "desired" day, either normal or "special" day
         while (!((cron_getBit(w_flags, day_of_month)) || cron_getBit(days_of_month, day_of_month)) &&
                count++ < max) {
@@ -444,9 +466,10 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
                     return 0;
                 }
 
-                if (oldmonth != calendar->tm_mon) { // Jumped into the previous month by accident...
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH,
-                                       3 * sign); // ...so we have to go 3 days forward to get to the closest monday.
+                if (oldmonth != calendar->tm_mon) {
+                    // Jumped into the previous/next month by accident...
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 3 * sign);
+                    // ...so we have to go 3 days forward/backward to get to the closest monday.
                     if (err) {
                         *res_out = 1;
                         return 0;
@@ -461,20 +484,19 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
             }
         }
         if ((startmonth == calendar->tm_mon) && (day_of_month < startday)) {
-            // Go to next month, try again
-            err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+            // Result day is before start date?
+            // Go to day after evaluated day, try again
+            err = set_field(calendar, CRON_CF_DAY_OF_MONTH, loopday + 1);
             if (err) {
                 *res_out = 1;
                 return 0;
             }
-            err = add_to_field(calendar, CRON_CF_MONTH, 1);
-            if (err) {
-                *res_out = 1;
-                return 0;
-            }
+
             day_of_month = calendar->tm_mday;
         } else break;
     }
+    // end of loop
+    day_of_month = calendar->tm_mday;
     if ((startday != day_of_month) || (startmonth != calendar->tm_mon)) {
         reset_all(calendar, reset_fields);
     }
@@ -683,7 +705,7 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
                         *res_out = 1;
                         return 0;
                     }
-                    err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
+                    err = add_to_field(calendar, CRON_CF_MONTH, 1);
                     if (err) {
                         *res_out = 1;
                         return 0;
