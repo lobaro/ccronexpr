@@ -778,6 +778,10 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
 
     while (reset_fields) {
+        if (calendar->tm_year - dot > 4) {
+            res = -1;
+            goto return_result;
+        }
         second = calendar->tm_sec;
         update_second = find_next(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE,
                                   &second_reset_fields,
@@ -835,10 +839,6 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
                                  &res); // max-1 because month bits are only set from 0 to 11
         if (0 != res) goto return_result;
         if (month != update_month) {
-            if (calendar->tm_year - dot > 4) {
-                res = -1;
-                goto return_result;
-            }
             continue;
         }
         goto return_result;

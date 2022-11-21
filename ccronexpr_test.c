@@ -510,6 +510,7 @@ void test_parse() {
     check_expr_invalid("H(5-o) H H H H *");
     check_expr_invalid("H(o-10) H H H H *");
     check_expr_invalid("H H H * H(0-8) *");
+    check_expr_invalid("H H H * H(-1-8) *");
 }
 
 void test_bits() {
@@ -552,7 +553,7 @@ void test_invalid_bits(void)
     cron_expr expr;
     const char *err = NULL;
     time_t res;
-    struct tm *errortime;
+    struct tm *errortime = NULL;
     char buffer[21];
 
     // Test if non-zeroed cron_expr contains "old" bits after parsing
@@ -568,17 +569,29 @@ void test_invalid_bits(void)
         assert(0);
     }
 
+    // Init start date for cron_next tests with invalid/unused bits
+    struct tm *calinit = poors_mans_strptime("2012-07-01_09:53:50");
+    const time_t dateinit = timegm(calinit);
+    // Test empty cron
+    memset(&expr, 0, sizeof expr);
+    res = cron_next(&expr, dateinit);
+    if (res != -1) {
+        printf("Error: Empty cron found next trigger date successfully\n");
+        errortime = gmtime(&res);
+        strftime(buffer, 20, DATE_FORMAT, errortime);
+        printf("%s\n", buffer);
+        assert(0);
+    }
+
     // Test only unused bits in expr
     memset(&expr, 0, sizeof expr);
     expr.seconds[7] = 0xF0;
     expr.minutes[7] = 0xF0;
     // all hour bits are used
     expr.days_of_month[0] = 0x01;
-    expr.months[2] = 0x80;
+    expr.months[1] = 0x80;
     expr.days_of_week[0] = 0x01;
 
-    struct tm * calinit = poors_mans_strptime("2012-07-01_09:53:50");
-    time_t dateinit = timegm(calinit);
     res = cron_next(&expr, dateinit);
     if (res != -1) {
         printf("Error: Empty cron (only unused bits) found next trigger date successfully\n");
@@ -587,12 +600,10 @@ void test_invalid_bits(void)
         printf("%s\n", buffer);
         assert(0);
     }
-    free(calinit);
+
     // Test only flags in expr
     memset(&expr, 0, sizeof expr);
-    expr.months[2] = 0x60;
-    calinit = poors_mans_strptime("2012-07-01_09:53:50");
-    dateinit = timegm(calinit);
+    expr.months[1] = 0x60;
     res = cron_next(&expr, dateinit);
     if (res != -1) {
         printf("Error: Empty cron (only flags) found next trigger date successfully\n");
@@ -601,6 +612,7 @@ void test_invalid_bits(void)
         printf("%s\n", buffer);
         assert(0);
     }
+
     free(calinit);
 
 }
@@ -618,7 +630,6 @@ void test_memory() {
     }
     printf("Allocations: total: %d, max: %d\n", cronTotalAllocations, maxAlloc);
 }
-// TODO: Add tests for empty expressions if only unused bits are set
 #endif
 
 int main() {
