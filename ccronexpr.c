@@ -408,7 +408,7 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
         loopday = calendar->tm_mday;
         loopmonth = calendar->tm_mon;
         // First: Check for w_flags up to 2 days earlier, but at most the 1st (bit 0 (LW) is checked separately)
-        desired_day = next_set_bit(w_flags, day_of_month, (day_of_month-2 ? day_of_month-2 : 1), &notfound);
+        desired_day = next_set_bit(w_flags, day_of_month, (day_of_month-2 > 0 ? day_of_month-2 : 1), &notfound);
         if (!notfound) {
             // Check first which day is the "desired" day (xxW):
             // - Is current day a Monday?
@@ -471,7 +471,7 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
             day_of_month = calendar->tm_mday;
         }
 
-        if (cron_getBit(w_flags, day_of_month) || check_weekday) { // weekday checking required?
+        if ( (cron_getBit(w_flags, day_of_month) && !cron_getBit(days_of_month, day_of_month)) || check_weekday) { // weekday checking required?
             // Is it a weekday? If so, great! It can be returned directly, and the following condition will be irrelevant.
             // Otherwise...
             if (calendar->tm_wday == 6 || !calendar->tm_wday) { // SAT or SUN
@@ -1463,7 +1463,6 @@ static char* w_check(char* field, cron_expr* target, const char** error)
 {
     char* has_w = strchr(field, 'W');
     char* newField = NULL;
-    char* nolwField = NULL;
     char** splitField = NULL;
     size_t len_out = 0;
 
@@ -1472,6 +1471,11 @@ static char* w_check(char* field, cron_expr* target, const char** error)
 
     // Only available for dom, so no pos checking needed
     if (has_w) {
+        newField = (char *)cronMalloc(strlen(field) );
+        if (!newField) {
+            *error = "w_check: newField malloc error";
+            goto return_error;
+        }
         // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
         if ( has_char(field, '/') || has_char(field, '-')) {
             *error = "W not allowed in iterators or ranges in 'day of month' field";
@@ -1505,19 +1509,10 @@ static char* w_check(char* field, cron_expr* target, const char** error)
                     }
                     cron_setBit(target->w_flags, w_day);
                 }
+            } else {
+                strcat(newField, splitField[i]);
             }
         }
-        nolwField = str_replace(field, "LW", "");
-        if (!nolwField) {
-            *error = "Error allocating new dom field string (LW)";
-            goto return_error;
-        }
-        newField = str_replace(nolwField, "W", "");
-        if (!newField) {
-            *error = "Error allocating new dom field string (W)";
-            goto return_error;
-        }
-        cronFree(nolwField);
         free_splitted(splitField, len_out);
         cronFree(field);
         return newField;
@@ -1535,6 +1530,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     char** fields = NULL;
     char* days_replaced = NULL;
     unsigned int offset = 0;
+    int notfound = 0;
     if (!error) {
         error = &err_local;
     }
@@ -1603,9 +1599,10 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     // Days of month: Test for L, if there, set 15th bit in months
     l_check(fields[3], 3, &offset, target, error);
     if (*error) goto return_res;
-    // If w flags are set, days of month can be empty (e.g. "LW")
-    // So parsing has to happen if the field str len > 0, but can be skipped if LW flag is set
-    if ( strlen(fields[3]) || !cron_getBit(target->w_flags, 0) ) set_days_of_month(fields[3], target->days_of_month, error);
+    // If w flags are set, days of month can be empty (e.g. "LW" or "9W")
+    // So parsing has to happen if the field str len > 0, but can be skipped if a W flag was found
+    next_set_bit(target->w_flags, CRON_MAX_DAYS_OF_MONTH, 0, &notfound);
+    if ( strlen(fields[3]) || notfound ) set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
     if (offset) cron_delBit(target->days_of_month, offset);
 
