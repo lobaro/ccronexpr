@@ -63,6 +63,19 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+**2022-11-22**
+
+ * `W` allowed multiple times for day-of-month (DOM): Multiple days with a `W` flag can now be used simultaneously, also together with `LW`.
+
+**2022-11-15**
+
+ * Fix unintended month rollovers by resetting calendar before incrementing next field, problem described in more detail and fix ported from staticlibs/ccronexpr#35
+
+**2022-11-14**
+
+ * `H` with selectable range: H can choose a pseudo-random value in a custom range for a field, provided the range is inside the field's allowed values range.
+   Form: `H(start-end)`
+
 **2022-08-01**
 
  * `do_next` finding next trigger date via iteration instead of recursion
