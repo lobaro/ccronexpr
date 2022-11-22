@@ -396,17 +396,19 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
     int err;
     unsigned int count = 0;
     unsigned int desired_day, loopday;
-    int notfound = 0;
+    int notfound = 0, loopmonth;
     const unsigned int max = 366;
+
+    unsigned int check_weekday = 0;
 
     int startday = calendar->tm_mday;
     int startmonth = calendar->tm_mon;
 
-    // TODO: Handle LW in this function, so it can be used together with other W flags
     for (unsigned int loop = 0; loop < max; loop++) {
         loopday = calendar->tm_mday;
-        // First: Check for w_flags up to 2 days earlier,
-        desired_day = next_set_bit(w_flags, day_of_month, day_of_month - 2, &notfound);
+        loopmonth = calendar->tm_mon;
+        // First: Check for w_flags up to 2 days earlier, but at most the 1st (bit 0 (LW) is checked separately)
+        desired_day = next_set_bit(w_flags, day_of_month, (day_of_month-2 ? day_of_month-2 : 1), &notfound);
         if (!notfound) {
             // Check first which day is the "desired" day (xxW):
             // - Is current day a Monday?
@@ -449,10 +451,27 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
                 *res_out = 1;
                 return 0;
             }
+            // check if month rolled over
+            if( loopmonth < calendar->tm_mon ) {
+                // check if LW flag is set, if yes, go back to last day of "current month"
+                if (cron_getBit(w_flags, 0)) {
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
+                    if (err) {
+                        *res_out = 1;
+                        return 0;
+                    }
+                    day_of_month = calendar->tm_mday;
+                    check_weekday = 1;
+                    break;
+                } else {
+                    // Update loopmonth, so the missing LW flag will not be checked on every following loop
+                    loopmonth = calendar->tm_mon;
+                }
+            }
             day_of_month = calendar->tm_mday;
         }
 
-        if (cron_getBit(w_flags, day_of_month)) { // weekday checking required?
+        if (cron_getBit(w_flags, day_of_month) || check_weekday) { // weekday checking required?
             // Is it a weekday? If so, great! It can be returned directly, and the following condition will be irrelevant.
             // Otherwise...
             if (calendar->tm_wday == 6 || !calendar->tm_wday) { // SAT or SUN
@@ -491,7 +510,7 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
                 *res_out = 1;
                 return 0;
             }
-
+            check_weekday = 0;
             day_of_month = calendar->tm_mday;
         } else break;
     }
@@ -573,71 +592,6 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
                             *res_out = 1;
                             return 0;
                         }
-                    }
-                } else break;
-            }
-        }
-        break;
-        case (L_DOM_FLAG | W_DOM_FLAG): {
-            // LW in DOM
-            // Special case: If already past the last weekday of the month, roll over into the next month
-            // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
-
-            // Find last day in current month
-            while (count++ < max)
-            {
-                // Goto first day of following month
-                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                // Then, go back to the end of starting month
-                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
-
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                day_of_month = calendar->tm_mday;
-
-                // Since the next weekday is found from the last day, it has to be behind the current day_of_month
-                if (calendar->tm_wday == 6) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
-
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    day_of_month = calendar->tm_mday;
-                } else if (calendar->tm_wday == 0) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -2);
-
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    day_of_month = calendar->tm_mday;
-                }
-                // Verify assumed trigger day is not behind startday
-                if ( (startmonth == calendar->tm_mon) && (startday > day_of_month) ) {
-                    // Startmonth hasn't changed, but trigger day is before initial day
-                    reset_all(calendar, reset_fields);
-                    // Roll over into next month
-                    err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
                     }
                 } else break;
             }
@@ -745,7 +699,7 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
         if (*res_out) goto return_error;
     }
     else {
-        next_set_bit(w_flags, CRON_MAX_DAYS_OF_MONTH , 0, &notfound); // check for W day presence; LW is handled in handle_l_flag
+        next_set_bit(w_flags, CRON_MAX_DAYS_OF_MONTH , 0, &notfound); // check for W day presence
         if (notfound) {
             while ((!cron_getBit(days_of_month, day_of_month) || !cron_getBit(days_of_week, day_of_week)) &&
                    count++ < max) {
@@ -797,7 +751,7 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     int month = 0;
     int update_month = 0;
     // L flags for DOM and DOW, or LW for DOM
-    uint8_t lw_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
+    uint8_t l_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
 
     while (reset_fields) {
         if (calendar->tm_year - dot > 4) {
@@ -837,18 +791,18 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         day_of_month = calendar->tm_mday;
         month = calendar->tm_mon;
 
-        if (cron_getBit(expr->w_flags, 0)) {
-            lw_flags |= W_DOM_FLAG; // for LW
-        }
         if (cron_getBit(expr->months, CRON_L_DOM_BIT)) {
-            lw_flags |= L_DOM_FLAG;
+            l_flags |= L_DOM_FLAG;
         }
         if (cron_getBit(expr->months, CRON_L_DOW_BIT)) {
-            lw_flags |= L_DOW_FLAG;
+            l_flags |= L_DOW_FLAG;
+        }
+        if (cron_getBit(expr->w_flags, 0)) {
+            l_flags = 0; // Clear L flags for LW
         }
 
         update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week,
-                                            day_of_week, lw_flags, expr->w_flags, &reset_fields, &res);
+                                            day_of_week, l_flags, expr->w_flags, &reset_fields, &res);
         if (0 != res) goto return_result;
         if (day_of_month == update_day_of_month && month == calendar->tm_mon) {
             push_to_fields_arr(&reset_fields, CRON_CF_DAY_OF_MONTH);
@@ -1509,6 +1463,7 @@ static char* w_check(char* field, cron_expr* target, const char** error)
 {
     char* has_w = strchr(field, 'W');
     char* newField = NULL;
+    char* nolwField = NULL;
     char** splitField = NULL;
     size_t len_out = 0;
 
@@ -1552,13 +1507,17 @@ static char* w_check(char* field, cron_expr* target, const char** error)
                 }
             }
         }
-        // Since W is only allowed with a single day in day of month, get rid of the W (and a possible rest of the string)
-        // so only the day in front of W will be set
-        newField = str_replace(field, "W", "");
-        if (!newField) {
-            *error = "Error allocating new dom field string";
+        nolwField = str_replace(field, "LW", "");
+        if (!nolwField) {
+            *error = "Error allocating new dom field string (LW)";
             goto return_error;
         }
+        newField = str_replace(nolwField, "W", "");
+        if (!newField) {
+            *error = "Error allocating new dom field string (W)";
+            goto return_error;
+        }
+        cronFree(nolwField);
         free_splitted(splitField, len_out);
         cronFree(field);
         return newField;
@@ -1644,7 +1603,9 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     // Days of month: Test for L, if there, set 15th bit in months
     l_check(fields[3], 3, &offset, target, error);
     if (*error) goto return_res;
-    set_days_of_month(fields[3], target->days_of_month, error);
+    // If w flags are set, days of month can be empty (e.g. "LW")
+    // So parsing has to happen if the field str len > 0, but can be skipped if LW flag is set
+    if ( strlen(fields[3]) || !cron_getBit(target->w_flags, 0) ) set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
     if (offset) cron_delBit(target->days_of_month, offset);
 
