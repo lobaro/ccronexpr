@@ -489,6 +489,7 @@ void test_parse() {
     check_expr_invalid("* * 27 * * *");
     check_expr_invalid("* * 23-28 * * *");
     check_expr_invalid("* * * 45 * *");
+    check_expr_invalid("* * * L-0 * *");
     check_expr_invalid("* * * 28-45 * *");
     check_expr_invalid("0 0 0 25 13 ?");
     check_expr_invalid("0 0 0 25 0 ?");

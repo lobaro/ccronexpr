@@ -1421,7 +1421,10 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
                             *error = "Error parsing L offset in 'day of month'";
                             return;
                         }
-                        if (*offset > 30) {
+                        if (*offset == 0) {
+                            *error = "Invalid offset: Needs to be > 0";
+                            return;
+                        } else if (*offset > 30) {
                             // used to break, now it will simply set offset to 30
                             *offset = 30;
                         }
