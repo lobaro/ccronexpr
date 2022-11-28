@@ -503,6 +503,10 @@ void test_parse() {
     check_expr_invalid("0 0 1 W3 * ?");
     check_expr_invalid("0 0 1 WL * ?");
     check_expr_invalid("0 0 1 10L * ?");
+    check_expr_invalid("0 0 1 L * 3");
+    check_expr_invalid("0 0 1 LW * 3");
+    check_expr_invalid("0 0 1 9W * 3");
+    check_expr_invalid("0 0 1 L-10 * 3");
     check_expr_invalid("0 0 1 L/7 * ?");
     check_expr_invalid("0 0 1 HLW * ?");
     check_expr_invalid("0 0 1 HL/H * ?");
@@ -539,6 +543,7 @@ void test_parse() {
     check_expr_invalid("H H H */H H *");
     check_expr_invalid("H H H H(0-39) H *");
     check_expr_invalid("H(0-60) H H H H *");
+    check_expr_invalid("H(0-30 H H H H *");
     check_expr_invalid("H(5-69) H H H H *");
     check_expr_invalid("H(11-6) H H H H *");
     check_expr_invalid("H H(17-93) H H H *");
