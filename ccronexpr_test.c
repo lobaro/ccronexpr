@@ -657,6 +657,22 @@ void test_invalid_bits(void)
         assert(0);
     }
 
+    // Test only seconds, minutes and hours in expr
+    memset(&expr, 0, sizeof expr);
+
+    memset(expr.seconds, 0xFF, sizeof(uint8_t) * 8);
+    memset(expr.minutes, 0xFF, sizeof(uint8_t) * 8);
+    memset(expr.hours, 0xFF, sizeof(uint8_t) * 3);
+
+    res = cron_next(&expr, dateinit);
+    if (res != -1) {
+        printf("Error: CRON with only seconds, minutes and hours found next trigger date successfully\n");
+        errortime = gmtime(&res);
+        strftime(buffer, 20, DATE_FORMAT, errortime);
+        printf("%s\n", buffer);
+        assert(0);
+    }
+
     free(calinit);
 
 }
