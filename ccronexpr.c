@@ -367,8 +367,10 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
         if (err) goto return_error;
         notfound = 0;
         next_value = next_set_bit(bits, max, 0, &notfound);
+        // Still no set bit in range from 0 to max found? Range must be empty, return error
+        if (notfound) goto return_error;
     }
-    if (notfound || next_value != value) {
+    if (next_value != value) {
         err = reset_all(calendar, reset_fields);
         if (err) goto return_error;
         err = set_field(calendar, field, next_value);
