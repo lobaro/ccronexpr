@@ -345,6 +345,7 @@ void test_expr() {
     check_next("H H H H H ?",       "2022-05-12_00:00:00", "2023-01-22_12:24:12"); // 12 24 12 22 1 3
     check_next("H H H ? H H",       "2022-05-12_00:00:00", "2023-01-04_12:24:12"); // 12 24 12 22 1 3
     check_next("0 0 1 ? * H/TUE",   "2022-05-12_00:00:00", "2022-05-13_01:00:00"); // 1/TUE
+    cron_init_custom_hash_fn(testing_hash_function);
     // W Tests
     check_next("0 0 1 4W * ?",      "2022-04-12_00:00:00", "2022-05-04_01:00:00");
     check_next("0 0 1 4W * ?",      "2022-05-12_00:00:00", "2022-06-03_01:00:00");
@@ -380,9 +381,10 @@ void test_expr() {
     check_next("0 0 1 31W * ?",     "2022-06-17_00:00:00", "2022-07-29_01:00:00");
     check_next("0 0 1 31W * ?",     "2022-07-30_00:00:00", "2022-08-31_01:00:00");
     check_next("0 0 1 26W * ?",     "2022-06-27_00:00:00", "2022-06-27_01:00:00");
-    check_next("H 0 1 26W * ?",     "2022-06-27_00:00:00", "2022-06-27_01:00:12");
-    check_next("H 0 1 26W * ?",     "2022-06-27_02:00:00", "2022-07-26_01:00:12");
-    check_next("H 0 1 HW * ?",      "2022-06-27_02:00:00", "2022-07-22_01:00:12");
+    check_next("H 0 1 26W * ?",     "2022-06-27_00:00:00", "2022-06-27_01:00:00");
+    check_next("H 0 1 26W * ?",     "2022-06-27_02:00:00", "2022-07-26_01:00:00");
+    check_next("H 0 1 HW * ?",      "2022-06-27_02:00:00", "2022-07-11_01:00:00"); // 10W
+    check_next("H 0 1 HW * ?",      "2022-05-27_02:00:00", "2022-06-10_01:00:00"); // 10W
     // L Tests
     check_next("0 0 1 LW * ?",    "2022-06-22_00:00:00", "2022-06-30_01:00:00");
     check_next("0 0 1 LW * ?",    "2022-07-01_00:00:00", "2022-07-29_01:00:00");
@@ -390,7 +392,8 @@ void test_expr() {
     check_next("0 0 1 LW * ?",    "2022-10-01_00:00:00", "2022-10-31_01:00:00");
     check_next("0 0 1 LW * ?",    "2022-07-31_00:00:00", "2022-08-31_01:00:00");
     check_next("0 0 1 LW * ?",    "2022-07-30_00:00:00", "2022-08-31_01:00:00");
-    check_next("H 0 H LW * ?",    "2022-10-01_00:00:00", "2022-10-31_12:00:12");
+    cron_init_hash(7);
+    check_next("H 0 H LW * ?",    "2022-10-01_00:00:00", "2022-10-31_14:00:00");
     check_next("0 0 1 L * ?",     "2022-05-12_00:00:00", "2022-05-31_01:00:00");
     check_next("0 0 1 L * ?",     "2022-02-12_00:00:00", "2022-02-28_01:00:00");
     check_next("0 0 1 L * ?",     "2020-02-12_00:00:00", "2020-02-29_01:00:00");
@@ -637,12 +640,12 @@ void test_invalid_bits(void)
         assert(0);
     }
 
-    // Test only flags in expr
+    // Test only L flags in expr (invalid by default, L flag can only be used in one of them at the time)
     memset(&expr, 0, sizeof expr);
     expr.months[1] = 0x60;
     res = cron_next(&expr, dateinit);
     if (res != -1) {
-        printf("Error: Empty cron (only flags) found next trigger date successfully\n");
+        printf("Error: Empty cron (only L flags) found next trigger date successfully\n");
         errortime = gmtime(&res);
         strftime(buffer, 20, DATE_FORMAT, errortime);
         printf("%s\n", buffer);
