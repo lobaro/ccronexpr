@@ -797,9 +797,6 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         if (cron_getBit(expr->months, CRON_L_DOW_BIT)) {
             l_flags |= L_DOW_FLAG;
         }
-        if (cron_getBit(expr->w_flags, 0)) {
-            l_flags = 0; // Clear L flags for LW
-        }
 
         update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week,
                                             day_of_week, l_flags, expr->w_flags, &reset_fields, &res);
@@ -1432,10 +1429,7 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
                 *has_l = '\0';
                 // avoid an empty dom field when string is starting with 'L'
                 if (strlen(field) == 0) {
-                    *field = '*';
-                    if ( strlen(field) > 1) {
-                        strcpy(field, "*");
-                    }
+                    strcpy(field, "*");
                 }
             }
             break;
@@ -1471,7 +1465,7 @@ static char* w_check(char* field, cron_expr* target, const char** error)
 
     // Only available for dom, so no pos checking needed
     if (has_w) {
-        newField = (char *)cronMalloc(strlen(field) );
+        newField = (char *)cronMalloc(sizeof(char) * strlen(field) );
         if (!newField) {
             *error = "w_check: newField malloc error";
             goto return_error;
@@ -1593,7 +1587,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     }
     fields[3] = check_and_replace_h(fields[3], 3, 1, error);
     if (*error) goto return_res;
-    // Days of month: Test for W, if there, set 16th bit in months
+    // Days of month: Test for W, if there, set appropriate w_flags in target
     fields[3] = w_check(fields[3], target, error);
     if (*error) goto return_res;
     // Days of month: Test for L, if there, set 15th bit in months
