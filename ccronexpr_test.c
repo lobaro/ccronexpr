@@ -534,6 +534,9 @@ void test_parse() {
     check_expr_invalid("0 0 1 ? * 1-H"); // H can not be used in ranges
     // Invalid iterator values
     check_expr_invalid("0/60 * * * * *");
+    check_expr_invalid("/12 * * * * *");
+    check_expr_invalid("12/ * * * * *");
+    check_expr_invalid("12- * * * * *");
     check_expr_invalid("* 0/60 * * * *");
     check_expr_invalid("* * 0/24 * * *");
     check_expr_invalid("* * * 1/32 * *");
