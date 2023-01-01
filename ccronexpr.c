@@ -1475,6 +1475,7 @@ static char* w_check(char* field, cron_expr* target, const char** error)
             *error = "w_check: newField malloc error";
             goto return_error;
         }
+        memset(newField, 0, sizeof(char) * strlen(field));
         // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
         if ( has_char(field, '/') || has_char(field, '-')) {
             *error = "W not allowed in iterators or ranges in 'day of month' field";
