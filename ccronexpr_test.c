@@ -706,7 +706,7 @@ int main() {
     #ifdef CRON_TEST_MALLOC
     test_memory(); /* For this test to work you need to set "-DCRON_TEST_MALLOC=1"*/
     #endif
-    printf("\nAll OK!");
+    printf("\nAll OK!\n");
     return 0;
 }
 
