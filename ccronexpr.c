@@ -123,8 +123,8 @@ time_t cron_mktime(struct tm* tm) {
 
 
 #ifndef CRON_TEST_MALLOC
-#define cronFree(x) free(x);
-#define cronMalloc(x) malloc(x);
+#define cronFree(x) free(x)
+#define cronMalloc(x) malloc(x)
 #else
 void* cronMalloc(size_t n);
 void cronFree(void* p);
