@@ -87,9 +87,9 @@ time_t cron_next(const cron_expr* expr, time_t date);
 /**
  * uint8_t* replace char* for storing hit dates, set_bit and get_bit are used as handlers
  */
-uint8_t cron_getBit(const uint8_t* rbyte, int idx);
-void cron_setBit(uint8_t* rbyte, int idx);
-void cron_delBit(uint8_t* rbyte, int idx);
+uint8_t cron_getBit(const uint8_t* rbyte, unsigned int idx);
+void cron_setBit(uint8_t* rbyte, unsigned int idx);
+void cron_delBit(uint8_t* rbyte, unsigned int idx);
 
 /**
  * Function for deterministic replacing of 'H' in expression (similar to Jenkins feature)
