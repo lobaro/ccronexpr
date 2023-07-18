@@ -123,8 +123,8 @@ time_t cron_mktime(struct tm* tm) {
 
 
 #ifndef CRON_TEST_MALLOC
-#define cronFree(x) free(x);
-#define cronMalloc(x) malloc(x);
+#define cronFree(x) free(x)
+#define cronMalloc(x) malloc(x)
 #else
 void* cronMalloc(size_t n);
 void cronFree(void* p);
@@ -153,9 +153,9 @@ struct tm* cron_time(time_t* date, struct tm* out) {
 #ifdef _WIN32
     errno_t err = localtime_s(out, date);
     return 0 == err ? out : NULL;
-#else /* _WIN32 */    
+#else /* _WIN32 */
     return localtime_r(date, out);
-#endif /* _WIN32 */    
+#endif /* _WIN32 */
 }
 
 #endif /* CRON_USE_LOCAL_TIME */
@@ -183,7 +183,7 @@ static char* strdupl(const char* str, size_t len) {
 /** Return next set bit position of bits starting at from_index as integer, set notfound to 1 if none was found.
  *  Interval: [from_index:max[
  */
-static unsigned int next_set_bit(uint8_t* bits, unsigned int max, unsigned int from_index, int* notfound) {
+static unsigned int next_set_bit(const uint8_t* bits, unsigned int max, unsigned int from_index, int* notfound) {
     unsigned int i;
     if (!bits) {
         *notfound = 1;
@@ -214,27 +214,27 @@ static int add_to_field(struct tm* calendar, cron_cf field, int val) {
         return 1;
     }
     switch (field) {
-    case CRON_CF_SECOND:
-        calendar->tm_sec = calendar->tm_sec + val;
-        break;
-    case CRON_CF_MINUTE:
-        calendar->tm_min = calendar->tm_min + val;
-        break;
-    case CRON_CF_HOUR_OF_DAY:
-        calendar->tm_hour = calendar->tm_hour + val;
-        break;
-    case CRON_CF_DAY_OF_WEEK: /* mkgmtime ignores this field */
-    case CRON_CF_DAY_OF_MONTH:
-        calendar->tm_mday = calendar->tm_mday + val;
-        break;
-    case CRON_CF_MONTH:
-        calendar->tm_mon = calendar->tm_mon + val;
-        break;
-    case CRON_CF_YEAR:
-        calendar->tm_year = calendar->tm_year + val;
-        break;
-    default:
-        return 1; /* unknown field */
+        case CRON_CF_SECOND:
+            calendar->tm_sec = calendar->tm_sec + val;
+            break;
+        case CRON_CF_MINUTE:
+            calendar->tm_min = calendar->tm_min + val;
+            break;
+        case CRON_CF_HOUR_OF_DAY:
+            calendar->tm_hour = calendar->tm_hour + val;
+            break;
+        case CRON_CF_DAY_OF_WEEK: /* mkgmtime ignores this field */
+        case CRON_CF_DAY_OF_MONTH:
+            calendar->tm_mday = calendar->tm_mday + val;
+            break;
+        case CRON_CF_MONTH:
+            calendar->tm_mon = calendar->tm_mon + val;
+            break;
+        case CRON_CF_YEAR:
+            calendar->tm_year = calendar->tm_year + val;
+            break;
+        default:
+            return 1; /* unknown field */
     }
     time_t res = cron_mktime(calendar);
     if (CRON_INVALID_INSTANT == res) {
@@ -251,29 +251,29 @@ static int reset(struct tm* calendar, cron_cf field) {
         return 1;
     }
     switch (field) {
-    case CRON_CF_SECOND:
-        calendar->tm_sec = 0;
-        break;
-    case CRON_CF_MINUTE:
-        calendar->tm_min = 0;
-        break;
-    case CRON_CF_HOUR_OF_DAY:
-        calendar->tm_hour = 0;
-        break;
-    case CRON_CF_DAY_OF_WEEK:
-        calendar->tm_wday = 0;
-        break;
-    case CRON_CF_DAY_OF_MONTH:
-        calendar->tm_mday = 1;
-        break;
-    case CRON_CF_MONTH:
-        calendar->tm_mon = 0;
-        break;
-    case CRON_CF_YEAR:
-        calendar->tm_year = 0;
-        break;
-    default:
-        return 1; /* unknown field */
+        case CRON_CF_SECOND:
+            calendar->tm_sec = 0;
+            break;
+        case CRON_CF_MINUTE:
+            calendar->tm_min = 0;
+            break;
+        case CRON_CF_HOUR_OF_DAY:
+            calendar->tm_hour = 0;
+            break;
+        case CRON_CF_DAY_OF_WEEK:
+            calendar->tm_wday = 0;
+            break;
+        case CRON_CF_DAY_OF_MONTH:
+            calendar->tm_mday = 1;
+            break;
+        case CRON_CF_MONTH:
+            calendar->tm_mon = 0;
+            break;
+        case CRON_CF_YEAR:
+            calendar->tm_year = 0;
+            break;
+        default:
+            return 1; /* unknown field */
     }
     time_t res = cron_mktime(calendar);
     if (CRON_INVALID_INSTANT == res) {
@@ -305,34 +305,34 @@ static int reset_all(struct tm* calendar, uint8_t *reset_fields) {
     return 0;
 }
 
-static int set_field(struct tm* calendar, cron_cf field, int val) {
+static int set_field(struct tm* calendar, cron_cf field, unsigned int val) {
     if (!calendar) {
         return 1;
     }
     switch (field) {
-    case CRON_CF_SECOND:
-        calendar->tm_sec = val;
-        break;
-    case CRON_CF_MINUTE:
-        calendar->tm_min = val;
-        break;
-    case CRON_CF_HOUR_OF_DAY:
-        calendar->tm_hour = val;
-        break;
-    case CRON_CF_DAY_OF_WEEK:
-        calendar->tm_wday = val;
-        break;
-    case CRON_CF_DAY_OF_MONTH:
-        calendar->tm_mday = val;
-        break;
-    case CRON_CF_MONTH:
-        calendar->tm_mon = val;
-        break;
-    case CRON_CF_YEAR:
-        calendar->tm_year = val;
-        break;
-    default:
-        return 1; /* unknown field */
+        case CRON_CF_SECOND:
+            calendar->tm_sec = (int) val;
+            break;
+        case CRON_CF_MINUTE:
+            calendar->tm_min = (int) val;
+            break;
+        case CRON_CF_HOUR_OF_DAY:
+            calendar->tm_hour = (int) val;
+            break;
+        case CRON_CF_DAY_OF_WEEK:
+            calendar->tm_wday = (int) val;
+            break;
+        case CRON_CF_DAY_OF_MONTH:
+            calendar->tm_mday = (int) val;
+            break;
+        case CRON_CF_MONTH:
+            calendar->tm_mon = (int) val;
+            break;
+        case CRON_CF_YEAR:
+            calendar->tm_year = (int) val;
+            break;
+        default:
+            return 1; /* unknown field */
     }
     time_t res = cron_mktime(calendar);
     if (CRON_INVALID_INSTANT == res) {
@@ -355,7 +355,7 @@ static int set_field(struct tm* calendar, cron_cf field, int val) {
  * @param res_out Pointer to error code output. (Will be checked by do_next().)
  * @return Either next trigger value for or 0 if field could not be set in calendar or lower calendar fields could not be reset. (If failing, *res_out will be set to 1 as well.)
  */
-static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, cron_cf field, cron_cf nextField, uint8_t* reset_fields, int* res_out) {
+static unsigned int find_next(const uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, cron_cf field, cron_cf nextField, uint8_t* reset_fields, int* res_out) {
     int notfound = 0;
     int err = 0;
     unsigned int next_value = next_set_bit(bits, max, value, &notfound);
@@ -393,7 +393,7 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, int day_of_month, uint8_t* w_flags, uint8_t* reset_fields, int* res_out)
+static unsigned int handle_w_dom(struct tm* calendar, const uint8_t* days_of_month, unsigned int day_of_month, const uint8_t* w_flags, uint8_t* reset_fields, int* res_out)
 {
     int err;
     unsigned int count = 0;
@@ -403,8 +403,8 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
 
     unsigned int check_weekday = 0;
 
-    int startday = calendar->tm_mday;
-    int startmonth = calendar->tm_mon;
+    unsigned int startday = calendar->tm_mday;
+    unsigned int startmonth = calendar->tm_mon;
 
     for (unsigned int loop = 0; loop < max; loop++) {
         loopday = calendar->tm_mday;
@@ -504,7 +504,7 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
                 day_of_month = calendar->tm_mday;
             }
         }
-        if ((startmonth == calendar->tm_mon) && (day_of_month < startday)) {
+        if ((startmonth == (unsigned int) calendar->tm_mon) && (day_of_month < startday)) {
             // Result day is before start date?
             // Go to day after evaluated day, try again
             err = set_field(calendar, CRON_CF_DAY_OF_MONTH, loopday + 1);
@@ -518,7 +518,7 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
     }
     // end of loop
     day_of_month = calendar->tm_mday;
-    if ((startday != day_of_month) || (startmonth != calendar->tm_mon)) {
+    if ((startday != day_of_month) || (startmonth != (unsigned int) calendar->tm_mon)) {
         reset_all(calendar, reset_fields);
     }
     return day_of_month;
@@ -535,19 +535,19 @@ static unsigned int handle_w_dom(struct tm* calendar, uint8_t* days_of_month, in
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, int day_of_month, uint8_t* days_of_week, uint8_t lw_flags, uint8_t* reset_fields, int* res_out)
+static unsigned int handle_l_flag(struct tm* calendar, const uint8_t* days_of_month, unsigned int day_of_month, const uint8_t* days_of_week, uint8_t lw_flags, uint8_t* reset_fields, int* res_out)
 {
     int err;
     unsigned int count = 0;
     const unsigned int max = 366;
 
-    int startday = calendar->tm_mday;
-    int startmonth = calendar->tm_mon;
+    unsigned int startday = calendar->tm_mday;
+    unsigned int startmonth = calendar->tm_mon;
 
     switch (lw_flags) {
         case L_DOW_FLAG: {
             // L with day in DOW
-            int searched_weekday = next_set_bit(days_of_week, 8, 0, res_out);
+            unsigned int searched_weekday = next_set_bit(days_of_week, 8, 0, res_out);
             if (*res_out == 1) return 0;
             // Special case: If already past the last weekday of the month, roll over into the next month
             // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
@@ -573,7 +573,7 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
                 day_of_month = calendar->tm_mday;
 
                 // Finally, go back until weekday matches searched weekday
-                while (searched_weekday != calendar->tm_wday) {
+                while (searched_weekday != (unsigned int) calendar->tm_wday) {
                     err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
                     if (err) {
                         *res_out = 1;
@@ -583,7 +583,7 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
                 }
 
                 // Verify assumed trigger day is not behind startday
-                if ( (startmonth == calendar->tm_mon) && (startday > day_of_month) ) {
+                if ( (startmonth == (unsigned int) calendar->tm_mon) && (startday > day_of_month) ) {
                     // Startmonth hasn't changed, but trigger day is before initial day
                     reset_all(calendar, reset_fields);
                     while (calendar->tm_mon - startmonth == 0) {
@@ -598,7 +598,7 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
                 } else break;
             }
         }
-        break;
+            break;
         case L_DOM_FLAG: {
             int currentmonth = startmonth;
             unsigned int offset;
@@ -632,7 +632,7 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
 
                 // If offset is set, go back offset days from end of month
                 if ((offset = next_set_bit(offset_mask, CRON_MAX_DAYS_OF_MONTH, 1, &err))) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -offset);
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, - (int) offset);
                     if (err) {
                         *res_out = 1;
                         return 0;
@@ -654,7 +654,7 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
                     }
                 }
                 // Check current trigger date is after startdate, otherwise roll over into next month and start again
-                if (calendar->tm_mon == startmonth && calendar->tm_mday < startday) {
+                if ((unsigned int) calendar->tm_mon == startmonth && (unsigned int) calendar->tm_mday < startday) {
                     // Goto first day of following month
                     err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
                     if (err) {
@@ -675,22 +675,22 @@ static unsigned int handle_l_flag(struct tm* calendar, uint8_t* days_of_month, i
                 break;
             }
         }
-        break;
+            break;
         default: {
             // if different bits are set this shouldn't deal with it
             *res_out = 1;
             return 0;
         }
-        break;
+            break;
     }
     // Finally, check if the planned date has moved in comparison to the start. If so, reset appropriate calendar fields for recalculation
-    if ( (startday != day_of_month) || (startmonth != calendar->tm_mon) ) {
+    if ( (startday != day_of_month) || (startmonth != (unsigned int) calendar->tm_mon) ) {
         reset_all(calendar, reset_fields);
     }
     return day_of_month;
 }
 
-static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, uint8_t l_flags, uint8_t* w_flags, uint8_t* reset_fields, int* res_out) {
+static unsigned int find_next_day(struct tm* calendar, const uint8_t* days_of_month, unsigned int day_of_month, const uint8_t* days_of_week, unsigned int day_of_week, uint8_t l_flags, const uint8_t* w_flags, uint8_t* reset_fields, int* res_out) {
     int err;
     unsigned int count = 0;
     int notfound = 0;
@@ -737,21 +737,21 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
  * @param dot Year of the original time. If no trigger is found even 4 years in the future, an error code (-1) is returned.
  * @return Error code: 0 on success, other values (e. g. -1) mean failure.
  */
-static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
+static int do_next(const cron_expr* expr, struct tm* calendar, unsigned int dot) {
     int res = 0;
     uint8_t reset_fields = 0xFE; // First bit (seconds) should always be unset, because if minutes roll over (and seconds didn't), seconds need to be reset as well
     uint8_t second_reset_fields = 0xFF; // Only used for seconds; they shouldn't reset themselves after finding a match
-    int second = 0;
-    int update_second = 0;
-    int minute = 0;
-    int update_minute = 0;
-    int hour = 0;
-    int update_hour = 0;
-    int day_of_week = 0;
-    int day_of_month = 0;
-    int update_day_of_month = 0;
-    int month = 0;
-    int update_month = 0;
+    unsigned int second = 0;
+    unsigned int update_second = 0;
+    unsigned int minute = 0;
+    unsigned int update_minute = 0;
+    unsigned int hour = 0;
+    unsigned int update_hour = 0;
+    unsigned int day_of_week = 0;
+    unsigned int day_of_month = 0;
+    unsigned int update_day_of_month = 0;
+    unsigned int month = 0;
+    unsigned int update_month = 0;
     // L flags for DOM and DOW, or LW for DOM
     uint8_t l_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
 
@@ -803,7 +803,7 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week,
                                             day_of_week, l_flags, expr->w_flags, &reset_fields, &res);
         if (0 != res) goto return_result;
-        if (day_of_month == update_day_of_month && month == calendar->tm_mon) {
+        if (day_of_month == update_day_of_month && month == (unsigned int) calendar->tm_mon) {
             push_to_fields_arr(&reset_fields, CRON_CF_DAY_OF_MONTH);
         } else {
             continue;
@@ -1029,7 +1029,7 @@ void cron_init_custom_hash_fn(cron_custom_hash_fn func)
 static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsigned int max, cron_custom_hash_fn hashFn, const char** error)
 {
     unsigned int i = 0;
-    int value;
+    unsigned int value;
     char *newField = NULL;
     // needed when a custom range is detected and removed
     char customRemover[8];
@@ -1068,7 +1068,7 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
 
     // Create string
     char value_str[3];
-    sprintf(value_str, "%d", value);
+    sprintf(value_str, "%u", value);
     newField = str_replace(field, "H", value_str);
 
     if (!newField) {
@@ -1078,11 +1078,9 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
 
     cronFree(field);
     return newField;
-
 }
 
 static unsigned int* get_range(char* field, unsigned int min, unsigned int max, const char** error) {
-
     char** parts = NULL;
     size_t len = 0;
     unsigned int* res = (unsigned int*) cronMalloc(2 * sizeof(unsigned int));
@@ -1143,26 +1141,21 @@ static unsigned int* get_range(char* field, unsigned int min, unsigned int max, 
     return NULL;
 }
 
-void cron_setBit(uint8_t* rbyte, int idx) {
-
+void cron_setBit(uint8_t* rbyte, unsigned int idx) {
     uint8_t j = idx / 8;
     uint8_t k = idx % 8;
 
     rbyte[j] |= (1 << k);
-
 }
 
-void cron_delBit(uint8_t* rbyte, int idx) {
-
+void cron_delBit(uint8_t* rbyte, unsigned int idx) {
     uint8_t j = idx / 8;
     uint8_t k = idx % 8;
 
     rbyte[j] &= ~(1 << k);
-
 }
 
-uint8_t cron_getBit(uint8_t* rbyte, int idx) {
-
+uint8_t cron_getBit(const uint8_t* rbyte, unsigned int idx) {
     uint8_t j = idx / 8;
     uint8_t k = idx % 8;
 
@@ -1171,7 +1164,6 @@ uint8_t cron_getBit(uint8_t* rbyte, int idx) {
     } else {
         return 0;
     }
-
 }
 
 /**
@@ -1293,8 +1285,8 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
                 (minBuf > maxBuf) || \
                 (minBuf < min) || \
                 // if a customMax is present: Is read maximum bigger than it? (which it shouldn't be)
-                (customMax ? maxBuf > customMax : 0)
-            ) {
+                 (customMax ? maxBuf > customMax : 0)
+                    ) {
                 *error = "'H' custom range error";
                 return field;
             }
@@ -1437,7 +1429,7 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
                     strcpy(field, "*");
                 }
             }
-            break;
+                break;
             case CRON_FIELD_DAY_OF_WEEK: {
                 if ( has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
                     *error = "L only allowed in combination with one day in 'day of week' field";
@@ -1450,7 +1442,7 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
                     *has_l = '\0';
                 }
             }
-            break;
+                break;
             default:
                 *error = "Trying to find 'L' in unsupported field";
                 break;
@@ -1483,8 +1475,8 @@ static char* w_check(char* field, cron_expr* target, const char** error)
         }
         // Ensure no specific days are set in day of week
         if ( (target->days_of_week[0] ^ 0x7f) != 0 ) {
-                *error = "Cannot set specific days of week when using 'W' in days of month.";
-                goto return_error;
+            *error = "Cannot set specific days of week when using 'W' in days of month.";
+            goto return_error;
         }
         splitField = split_str(field, ',', &len_out);
         if (!splitField) {
@@ -1611,11 +1603,11 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
 
     goto return_res;
 
-    return_res: 
+    return_res:
     free_splitted(fields, len);
 }
 
-time_t cron_next(cron_expr* expr, time_t date) {
+time_t cron_next(const cron_expr* expr, time_t date) {
     /*
      The plan:
 
@@ -1657,4 +1649,3 @@ time_t cron_next(cron_expr* expr, time_t date) {
 
     return cron_mktime(calendar);
 }
-
