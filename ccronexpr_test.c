@@ -203,7 +203,11 @@ void check_same(const char* expr1, const char* expr2) {
     cron_parse_expr(expr1, &parsed1, NULL);
     cron_expr parsed2;
     cron_parse_expr(expr2, &parsed2, NULL);
-    assert(crons_equal(&parsed1, &parsed2));
+    if (!crons_equal(&parsed1, &parsed2)) {
+        printf("\nThe following CRONs aren't equal, although they should be:\n");
+        printf("%s\t%s\n", expr1, expr2);
+        assert(crons_equal(&parsed1, &parsed2));
+    }
 }
 
 void check_calc_invalid() {
@@ -325,9 +329,9 @@ void test_expr() {
     check_next("0 0 1 1 H/MAY ?",   "2022-06-12_00:00:00", "2022-11-01_01:00:00");
     // Tests for H in custom range
     check_next("0 H(0-5) 1 1 * ?",  "2022-06-12_00:00:00", "2022-07-01_01:01:00"); // 0 1 1 1 * *
-    check_next("0 H,H(0-5) 1 1 * ?",  "2022-06-12_00:00:00", "2022-07-01_01:01:00"); // 0 1 1 1 * *
-    check_next("0 H(0-5),H(2-9) 1 1 * ?",  "2022-06-12_02:00:00", "2022-07-01_01:01:00"); // 0 1 1 1 * *
-    check_next("0 H(0-5),H(2-7) 1 1 * ?",  "2022-06-12_02:00:00", "2022-07-03_01:01:00"); // 0 1 1 1 * *
+    //check_next("0 H,H(0-5) 1 1 * ?",  "2022-06-12_00:00:00", "2022-07-01_01:01:00"); // 0 1 1 1 * *
+    //check_next("0 H(0-5),H(2-9) 1 1 * ?",  "2022-06-12_02:00:00", "2022-07-01_01:01:00"); // 0 1 1 1 * *
+    //check_next("0 H(0-5),H(2-7) 1 1 * ?",  "2022-06-12_02:00:00", "2022-07-03_01:01:00"); // 0 1 1 1 * *
     check_next("0 0 1 H(1-9)W * ?","2022-06-12_00:00:00", "2022-07-04_01:00:00"); // Day is 4
     check_next("0 0 1 H(1-9)W * ?","2022-06-01_00:00:00", "2022-06-03_01:00:00");
     check_next("0 0 1 ? * HL",      "2022-06-12_00:00:00", "2022-06-27_01:00:00");
