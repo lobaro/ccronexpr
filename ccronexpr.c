@@ -1349,22 +1349,17 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
                 *error = "Failed to split 'H' string in list";
                 return field;
             }
-            char* res_arr[subfields_len];
             size_t res_len = 0;
             for (size_t i = 0; i < subfields_len; i++) {
                 has_h = strchr(subfields[i], 'H');
-                char* res = subfields[i];
                 if (has_h) {
-                    res = replace_h_entry(subfields[i], pos, min, error);
-                    // subfield was already freed, so set to "new" res field
-                    subfields[i] = res;
+                    subfields[i] = replace_h_entry(subfields[i], pos, min, error);
                 }
                 if (*error != NULL) {
                     free_splitted(subfields, subfields_len);
                     return field; // something went wrong trying to replace a subfield
                 }
-                res_arr[i] = res;
-                res_len += strnlen(res, CRON_MAX_STR_LEN_TO_SPLIT);
+                res_len += strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT);
             }
             // Allocate space for the full string: Result lengths + (result count - 1) for the commas + 1 for '\0'
             char *accum_field = (char *) cronMalloc(res_len + subfields_len );
@@ -1374,9 +1369,9 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
             }
             memset(accum_field, 0, res_len + subfields_len);
             // Add initial field
-            sprintf(accum_field, "%s", res_arr[0]);
+            sprintf(accum_field, "%s", subfields[0]);
             for (size_t i = 1; i < subfields_len; i++) {
-                sprintf(accum_field, "%s,%s", accum_field, res_arr[i]);
+                sprintf(accum_field, "%s,%s", accum_field, subfields[i]);
             }
             free_splitted(subfields, subfields_len);
             cronFree(field);
