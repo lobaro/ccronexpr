@@ -1,0 +1,30 @@
+name: Build and test ccronexpr
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - test
+      - '[0-9]+.[0-9]+.[0-9]'
+  pull_request:
+    types: [opened, synchronize, labeled, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref_type == 'tag' && ( (github.ref_name == '0.0.0-test' && 'test') || 'master') || github.ref_name }}"
+  cancel-in-progress: ${{ github.ref_type == 'tag' || github.ref_name != 'master' }}
+
+jobs:
+  build_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Make build dir
+        run: mkdir -p "${{ github.workspace }}/build"
+      - name: Build with CMAKE
+        run: |
+          cmake -B "${{ github.workspace }}/build" -S ${{ github.workspace }}
+          cmake --build "${{ github.workspace }}/build" --target ccronexpr
+      - name: Run test executable
+        run: "${{ github.workspace }}/build/ccronexpr"
