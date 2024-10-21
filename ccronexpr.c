@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "ccronexpr.h"
 
@@ -878,6 +879,50 @@ static char* str_replace(char *orig, const char *rep, const char *with) {
     }
     strcpy(tmp, orig);
     return result;
+}
+
+/** Append string arguments into one (freshly malloced) string.
+ * The first string is assumed to be a malloced string, and will be freed before returning the new string.
+ *
+ * User needs to free the returned string after use! Also specify the amount of string arguments as first int.
+ **/
+static char* str_append(const char* str1, uint8_t is_malloced, const uint8_t extra_strs, ...) {
+    if (str1 == NULL) {
+        str1 = "";
+        is_malloced = 0;
+    }
+    va_list for_len;
+    va_list for_append;
+    va_start(for_len, extra_strs);
+    va_copy(for_append, for_len);
+
+    // Get string lengths, ceil at CRON_MAX_STR_LEN_TO_SPLIT
+    size_t str_len = strnlen(str1, CRON_MAX_STR_LEN_TO_SPLIT);
+    uint8_t str_lens[extra_strs];
+    for (uint8_t i = 0; i < extra_strs; i++) {
+        char* arg_str = va_arg(for_len, char*);
+        str_lens[i] = strnlen(arg_str, CRON_MAX_STR_LEN_TO_SPLIT);
+        str_len += str_lens[i];
+    }
+    // Allocate new string, plus 0 byte
+    char* res = (char*) cronMalloc((str_len + 1) * sizeof(char));
+    if (res == NULL) return NULL;
+    memset(res, 0, (str_len+1)*sizeof(char));
+    // Add first string
+    char* tracking = res;
+    strncpy(res, str1, strnlen(str1, CRON_MAX_STR_LEN_TO_SPLIT));
+    tracking += strnlen(str1, CRON_MAX_STR_LEN_TO_SPLIT);
+    for (uint8_t i = 0; i < extra_strs; i++) {
+        char* arg_str = va_arg(for_append, char*);
+        strncpy(tracking, arg_str, str_lens[i]);
+        tracking += str_lens[i];
+    }
+
+    res[str_len+1] = '\0';
+    if (is_malloced) {
+        cronFree(str1);
+    }
+    return res;
 }
 
 static unsigned int parse_uint(const char* str, int* errcode) {
