@@ -881,50 +881,10 @@ static char* str_replace(char *orig, const char *rep, const char *with) {
     return result;
 }
 
-/** Append string arguments into one (freshly malloced) string.
- * The first string is assumed to be a malloced string, and will be freed before returning the new string.
- *
- * User needs to free the returned string after use! Also specify the amount of string arguments as first int.
- **/
-static char* str_append(const char* str1, const uint8_t extra_strs, ...) {
-    if (str1 == NULL) {
-        str1 = "";
-    }
-    va_list for_len;
-    va_list for_append;
-    va_start(for_len, extra_strs);
-    va_copy(for_append, for_len);
-
-    // Get string lengths, ceil at CRON_MAX_STR_LEN_TO_SPLIT
-    size_t str_len = strnlen(str1, CRON_MAX_STR_LEN_TO_SPLIT);
-    uint8_t str_lens[extra_strs];
-    for (uint8_t i = 0; i < extra_strs; i++) {
-        char* arg_str = va_arg(for_len, char*);
-        str_lens[i] = strnlen(arg_str, CRON_MAX_STR_LEN_TO_SPLIT);
-        str_len += str_lens[i];
-    }
-    // Allocate new string, plus 0 byte
-    char* res = (char*) cronMalloc((str_len + 1) * sizeof(char));
-    if (res == NULL) return NULL;
-    memset(res, 0, (str_len+1)*sizeof(char));
-    // Add first string
-    char* tracking = res;
-    strncpy(res, str1, strnlen(str1, CRON_MAX_STR_LEN_TO_SPLIT));
-    tracking += strnlen(str1, CRON_MAX_STR_LEN_TO_SPLIT);
-    for (uint8_t i = 0; i < extra_strs; i++) {
-        char* arg_str = va_arg(for_append, char*);
-        strncpy(tracking, arg_str, str_lens[i]);
-        tracking += str_lens[i];
-    }
-
-    res[str_len+1] = '\0';
-    return res;
-}
-
 static unsigned int parse_uint(const char* str, int* errcode) {
     char* endptr;
     errno = 0;
-    long int l = strtol(str, &endptr, 0);
+    long int l = strtol(str, &endptr, 10);
     if (errno == ERANGE || *endptr != '\0' || l < 0 || l > INT_MAX) {
         *errcode = 1;
         return 0;
@@ -1058,7 +1018,9 @@ void cron_init_custom_hash_fn(cron_custom_hash_fn func)
 }
 
 /**
- * Replace H parameter with integer in proper range. If using an iterator fielo, min/max have to be set to proper values before!
+ * Replace H parameter with integer in proper range. If using an iterator field, min/max have to be set to proper values before!
+ * The input field will always be freed, the returned char* should be used instead.
+ *
  * @param field CRON field which needs a value for its 'H' (in string form)
  * @param n Position of the field in the CRON string, from 0 - 5
  * @param min Minimum value allowed in field/for replacement
@@ -1295,77 +1257,133 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 
 }
 
-static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min, const char** error)
-{
+static char *replace_h_entry(char *field, unsigned int pos, unsigned int min, const char **error) {
+    char* has_h = strchr(field, 'H');
+    if (has_h == NULL) {
+        return field;
+    }
+
     unsigned int fieldMax = 0, customMax = 0;
     // minBuf is 0xFF to see if it has been altered/read successfully, since 0 is a valid value for it
     unsigned int minBuf = 0xFF, maxBuf = 0;
-    char* has_h = strchr(field, 'H');
-    if (has_h) {
-        if ( *(has_h+1) == '/') { /* H before an iterator */
-            sscanf(has_h, "H/%2u", &customMax); // get value of iterator, so it will be used as maximum instead of standard maximum for field
-            if (!customMax) { /* iterator might have been specified as an ordinal instead... */
-                *error = "Hashed: Iterator error";
-                return field;
-            }
-        }
-        if ( (has_h != field) && (*(has_h-1) == '/') ) { /* H not allowed as iterator */
-            *error = "Hashed: 'H' not allowed as iterator";
+
+    if(*(has_h + 1) == '/') { /* H before an iterator */
+        sscanf(has_h, "H/%2u", &customMax); // get value of iterator, so it will be used as maximum instead of standard maximum for field
+        if (!customMax) { /* iterator might have been specified as an ordinal instead... */
+            *error = "Hashed: Iterator error";
             return field;
         }
-        if ( *(has_h+1) =='-' || \
-        ( has_h != field && *(has_h-1) == '-') ) { // 'H' not starting field, so may be the end of a range
-            *error = "'H' is not allowed for use in ranges";
-            return field;
-        }
-        // Test if custom Range is specified
-        if ( *(has_h+1) == '(' ) {
-            sscanf(has_h, "H(%2u-%2u)", &minBuf, &maxBuf);
-            if ( !maxBuf || \
+    }
+    if ((has_h != field) && (*(has_h - 1) == '/') ) { /* H not allowed as iterator */
+        *error = "Hashed: 'H' not allowed as iterator";
+        return field;
+    }
+    if (*(has_h + 1) == '-' || \
+        (has_h != field && *(has_h - 1) == '-') ) { // 'H' not starting field, so may be the end of a range
+        *error = "'H' is not allowed for use in ranges";
+        return field;
+    }
+    // Test if custom Range is specified
+    if (*(has_h + 1) == '(' ) {
+        sscanf(has_h, "H(%2u-%2u)", &minBuf, &maxBuf);
+        if ( !maxBuf || \
                 (minBuf == 0xFF) || \
                 (minBuf > maxBuf) || \
                 (minBuf < min) || \
                 // if a customMax is present: Is read maximum bigger than it? (which it shouldn't be)
-                 (customMax ? maxBuf > customMax : 0)
-                    ) {
-                *error = "'H' custom range error";
-                return field;
-            }
-            min = minBuf;
-            // maxBuf needs to be incremented by 1 to include it
-            customMax = maxBuf + 1;
-        }
-        switch (pos) {
-            case CRON_FIELD_SECOND:
-                fieldMax = CRON_MAX_SECONDS;
-                break;
-            case CRON_FIELD_MINUTE:
-                fieldMax = CRON_MAX_MINUTES;
-                break;
-            case CRON_FIELD_HOUR:
-                fieldMax = CRON_MAX_HOURS;
-                break;
-            case CRON_FIELD_DAY_OF_MONTH:
-                // limited to 28th so the hashed cron will be executed every month
-                fieldMax = 28;
-                break;
-            case CRON_FIELD_MONTH:
-                fieldMax = CRON_MAX_MONTHS;
-                break;
-            case CRON_FIELD_DAY_OF_WEEK:
-                fieldMax = CRON_MAX_DAYS_OF_WEEK;
-                break;
-            default:
-                *error = "Unknown field!";
-                return field;
-        }
-        if (!customMax) {
-            customMax = fieldMax;
-        } else if (customMax > fieldMax) {
-            *error = "'H' range maximum error";
+             (customMax ? maxBuf > customMax : 0)
+                ) {
+            *error = "'H' custom range error";
             return field;
         }
-        field = replace_hashed(field, pos, min, customMax, fn, error);
+        min = minBuf;
+        // maxBuf needs to be incremented by 1 to include it
+        customMax = maxBuf + 1;
+    }
+    switch (pos) {
+        case CRON_FIELD_SECOND:
+            fieldMax = CRON_MAX_SECONDS;
+            break;
+        case CRON_FIELD_MINUTE:
+            fieldMax = CRON_MAX_MINUTES;
+            break;
+        case CRON_FIELD_HOUR:
+            fieldMax = CRON_MAX_HOURS;
+            break;
+        case CRON_FIELD_DAY_OF_MONTH:
+            // limited to 28th so the hashed cron will be executed every month
+            fieldMax = 28;
+            break;
+        case CRON_FIELD_MONTH:
+            fieldMax = CRON_MAX_MONTHS;
+            break;
+        case CRON_FIELD_DAY_OF_WEEK:
+            fieldMax = CRON_MAX_DAYS_OF_WEEK;
+            break;
+        default:
+            *error = "Unknown field!";
+            return field;
+    }
+    if (!customMax) {
+        customMax = fieldMax;
+    } else if (customMax > fieldMax) {
+        *error = "'H' range maximum error";
+        return field;
+    }
+    field = replace_hashed(field, pos, min, customMax, fn, error);
+
+    return field;
+}
+
+static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min, const char** error)
+{
+    char* has_h = strchr(field, 'H');
+    if (has_h) {
+        // Check if Field contains ',', if so, split into multiple subfields, and replace in each (with same position no)
+        char *has_comma = strchr(field, ',');
+        if (has_comma) {
+            // Iterate over split sub-fields, check for 'H' and replace if present
+            size_t subfields_len = 0;
+            char** subfields = split_str(field, ',', &subfields_len);
+            if (subfields == NULL) {
+                *error = "Failed to split 'H' string in list";
+                return field;
+            }
+            char* res_arr[subfields_len];
+            size_t res_len = 0;
+            for (size_t i = 0; i < subfields_len; i++) {
+                has_h = strchr(subfields[i], 'H');
+                char* res = subfields[i];
+                if (has_h) {
+                    res = replace_h_entry(subfields[i], pos, min, error);
+                    // subfield was already freed, so set to "new" res field
+                    subfields[i] = res;
+                }
+                if (*error != NULL) {
+                    free_splitted(subfields, subfields_len);
+                    return field; // something went wrong trying to replace a subfield
+                }
+                res_arr[i] = res;
+                res_len += strnlen(res, CRON_MAX_STR_LEN_TO_SPLIT);
+            }
+            // Allocate space for the full string: Result lengths + (result count - 1) for the commas + 1 for '\0'
+            char *accum_field = (char *) cronMalloc(res_len + subfields_len );
+            if (accum_field == NULL) {
+                *error = "Failed to merge 'H' in list";
+                return field;
+            }
+            memset(accum_field, 0, res_len + subfields_len);
+            // Add initial field
+            sprintf(accum_field, "%s", res_arr[0]);
+            for (size_t i = 1; i < subfields_len; i++) {
+                sprintf(accum_field, "%s,%s", accum_field, res_arr[i]);
+            }
+            free_splitted(subfields, subfields_len);
+            cronFree(field);
+            return accum_field;
+        }
+        // only one H to find and replace, then return
+        field = replace_h_entry(field, pos, min, error);
     }
     return field;
 }
