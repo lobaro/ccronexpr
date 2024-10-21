@@ -886,10 +886,9 @@ static char* str_replace(char *orig, const char *rep, const char *with) {
  *
  * User needs to free the returned string after use! Also specify the amount of string arguments as first int.
  **/
-static char* str_append(const char* str1, uint8_t is_malloced, const uint8_t extra_strs, ...) {
+static char* str_append(const char* str1, const uint8_t extra_strs, ...) {
     if (str1 == NULL) {
         str1 = "";
-        is_malloced = 0;
     }
     va_list for_len;
     va_list for_append;
@@ -919,9 +918,6 @@ static char* str_append(const char* str1, uint8_t is_malloced, const uint8_t ext
     }
 
     res[str_len+1] = '\0';
-    if (is_malloced) {
-        cronFree(str1);
-    }
     return res;
 }
 
