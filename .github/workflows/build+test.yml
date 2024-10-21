@@ -19,6 +19,8 @@ jobs:
       - name: Make build dir
         run: mkdir -p "${{ github.workspace }}/build"
       - name: Build with CMAKE
-        run: cmake --build "${{ github.workspace }}/build" --target ccronexpr
+        run: |
+          cmake .
+          cmake --build "${{ github.workspace }}/build" --target ccronexpr
       - name: Run test executable
         run: "${{ github.workspace }}/build/ccronexpr"
