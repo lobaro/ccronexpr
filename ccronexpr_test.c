@@ -241,9 +241,9 @@ bool check_expr_valid(const char* expr) {
     cron_parse_expr(expr, &test, &err);
     if (err) {
         printf("Error: '%s' parsed with an error: %s\n", expr, err);
-        return true;
+        return false;
     }
-    return false;
+    return true;
 }
 
 int testing_hash_function(int seed, uint8_t idx) {
@@ -498,8 +498,9 @@ void test_parse() {
     assert(check_expr_valid("H H H/2 ? H H"));
     assert(check_expr_valid("H H H(0-12) ? H H"));
     assert(check_expr_valid("H H H H(1-17) H ?"));
-    assert(check_expr_valid("H H H H(1-3),H(0-12) H *"));
-    assert(check_expr_valid("H,H(0-60) H H H H *"));
+    assert(check_expr_valid("H H H H(1-3),H(2-12) H *"));
+    assert(check_expr_valid("H H H(1-3),H(0-12) H H *"));
+    assert(check_expr_valid("H,H(0-59) H H H H *"));
     cron_init_custom_hash_fn(testing_hash_function);
 
     assert(check_expr_invalid("77 * * * * *"));
