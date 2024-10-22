@@ -72,9 +72,10 @@ typedef enum {
 
 #define CRON_INVALID_INSTANT ((time_t) -1)
 
-static const char* DAYS_ARR[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+static const char *DAYS_ARR[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 #define CRON_DAYS_ARR_LEN 7
-static const char* MONTHS_ARR[] = { "FOO", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
+static const char *MONTHS_ARR[] = {"FOO", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV",
+                                   "DEC"};
 #define CRON_MONTHS_ARR_LEN 13
 
 #define CRON_MAX_STR_LEN_TO_SPLIT 256
@@ -91,8 +92,11 @@ static const char* MONTHS_ARR[] = { "FOO", "JAN", "FEB", "MAR", "APR", "MAY", "J
                                 (abs(num) < 1000000000 ? 9 : 10)))))))))
 
 #ifndef _WIN32
+
 struct tm *gmtime_r(const time_t *timep, struct tm *result);
+
 struct tm *localtime_r(const time_t *timep, struct tm *result);
+
 #endif
 
 /* Defining 'cron_mktime' to use use UTC (default) or local time */
@@ -105,10 +109,13 @@ time_t cron_mktime(struct tm* tm) {
 }
 #else /* _WIN32 */
 #ifndef ANDROID
+
 /* can be hidden in time.h */
-time_t timegm(struct tm* __tp);
+time_t timegm(struct tm *__tp);
+
 #endif /* ANDROID */
-time_t cron_mktime(struct tm* tm) {
+
+time_t cron_mktime(struct tm *tm) {
 #ifndef ANDROID
     return timegm(tm);
 #else /* ANDROID */
@@ -120,6 +127,7 @@ time_t cron_mktime(struct tm* tm) {
     return result;
 #endif /* ANDROID */
 }
+
 #endif /* _WIN32 */
 
 
@@ -127,11 +135,14 @@ time_t cron_mktime(struct tm* tm) {
 #define cronFree(x) free(x)
 #define cronMalloc(x) malloc(x)
 #else
-void* cronMalloc(size_t n);
-void cronFree(void* p);
+
+void *cronMalloc(size_t n);
+
+void cronFree(void *p);
+
 #endif
 
-struct tm* cron_time(time_t* date, struct tm* out) {
+struct tm *cron_time(time_t *date, struct tm *out) {
 #ifdef __MINGW32__
     (void)(out); /* To avoid unused warning */
     return gmtime(date);
@@ -161,7 +172,7 @@ struct tm* cron_time(time_t* date, struct tm* out) {
 
 #endif /* CRON_USE_LOCAL_TIME */
 
-static void free_splitted(char** splitted, size_t len) {
+static void free_splitted(char **splitted, size_t len) {
     size_t i;
     if (!splitted) return;
     for (i = 0; i < len; i++) {
@@ -172,9 +183,9 @@ static void free_splitted(char** splitted, size_t len) {
     cronFree(splitted);
 }
 
-static char* strdupl(const char* str, size_t len) {
+static char *strdupl(const char *str, size_t len) {
     if (!str) return NULL;
-    char* res = (char*) cronMalloc(len + 1);
+    char *res = (char *) cronMalloc(len + 1);
     if (!res) return NULL;
     memset(res, 0, len + 1);
     memcpy(res, str, len);
@@ -184,7 +195,7 @@ static char* strdupl(const char* str, size_t len) {
 /** Return next set bit position of bits starting at from_index as integer, set notfound to 1 if none was found.
  *  Interval: [from_index:max[
  */
-static unsigned int next_set_bit(const uint8_t* bits, unsigned int max, unsigned int from_index, int* notfound) {
+static unsigned int next_set_bit(const uint8_t *bits, unsigned int max, unsigned int from_index, int *notfound) {
     unsigned int i;
     if (!bits) {
         *notfound = 1;
@@ -200,7 +211,7 @@ static unsigned int next_set_bit(const uint8_t* bits, unsigned int max, unsigned
 /// Clear bit in reset byte at position *fi* (*arr* is usually initialized with -1)
 /// Example: push_to_fields_arr(array, CRON_CF_MINUTE)
 ///     - if used on a completely "new" array, would clear bit 2 (CRON_CF_MINUTE) and return
-static void push_to_fields_arr(uint8_t* arr, cron_cf fi) {
+static void push_to_fields_arr(uint8_t *arr, cron_cf fi) {
     if (!arr) {
         return;
     }
@@ -210,7 +221,7 @@ static void push_to_fields_arr(uint8_t* arr, cron_cf fi) {
     *arr &= ~(1 << fi); // Unset bit at position fi
 }
 
-static int add_to_field(struct tm* calendar, cron_cf field, int val) {
+static int add_to_field(struct tm *calendar, cron_cf field, int val) {
     if (!calendar) {
         return 1;
     }
@@ -247,7 +258,7 @@ static int add_to_field(struct tm* calendar, cron_cf field, int val) {
 /**
  * Reset the calendar field (at position field) to 0/1.
  */
-static int reset(struct tm* calendar, cron_cf field) {
+static int reset(struct tm *calendar, cron_cf field) {
     if (!calendar) {
         return 1;
     }
@@ -290,14 +301,14 @@ static int reset(struct tm* calendar, cron_cf field) {
  * @param reset_fields BitArray/BitFlags of CRON_CF_ARR_LEN; each bit is either 1 (no reset) or 0, so it will reset its corresponding field in calendar.
  * @return 1 if a reset fails, 0 if successful.
  */
-static int reset_all(struct tm* calendar, uint8_t *reset_fields) {
+static int reset_all(struct tm *calendar, uint8_t *reset_fields) {
     int i;
     int res = 0;
     if (!calendar || !reset_fields) {
         return 1;
     }
     for (i = 0; i < CRON_CF_ARR_LEN; i++) {
-        if ( !(*reset_fields & (1 << i)) ) { // reset when value was already considered "right", so bit was cleared
+        if (!(*reset_fields & (1 << i))) { // reset when value was already considered "right", so bit was cleared
             res = reset(calendar, i);
             if (0 != res) return res;
             *reset_fields |= 1 << i; // reset field bit here, so it will not be reset on next iteration if necessary
@@ -306,7 +317,7 @@ static int reset_all(struct tm* calendar, uint8_t *reset_fields) {
     return 0;
 }
 
-static int set_field(struct tm* calendar, cron_cf field, unsigned int val) {
+static int set_field(struct tm *calendar, cron_cf field, unsigned int val) {
     if (!calendar) {
         return 1;
     }
@@ -356,7 +367,9 @@ static int set_field(struct tm* calendar, cron_cf field, unsigned int val) {
  * @param res_out Pointer to error code output. (Will be checked by do_next().)
  * @return Either next trigger value for or 0 if field could not be set in calendar or lower calendar fields could not be reset. (If failing, *res_out will be set to 1 as well.)
  */
-static unsigned int find_next(const uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, cron_cf field, cron_cf nextField, uint8_t* reset_fields, int* res_out) {
+static unsigned int
+find_next(const uint8_t *bits, unsigned int max, unsigned int value, struct tm *calendar, cron_cf field,
+          cron_cf nextField, uint8_t *reset_fields, int *res_out) {
     int notfound = 0;
     int err = 0;
     unsigned int next_value = next_set_bit(bits, max, value, &notfound);
@@ -394,8 +407,9 @@ static unsigned int find_next(const uint8_t* bits, unsigned int max, unsigned in
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_w_dom(struct tm* calendar, const uint8_t* days_of_month, unsigned int day_of_month, const uint8_t* w_flags, uint8_t* reset_fields, int* res_out)
-{
+static unsigned int
+handle_w_dom(struct tm *calendar, const uint8_t *days_of_month, unsigned int day_of_month, const uint8_t *w_flags,
+             uint8_t *reset_fields, int *res_out) {
     int err;
     unsigned int count = 0;
     unsigned int desired_day, loopday;
@@ -411,7 +425,7 @@ static unsigned int handle_w_dom(struct tm* calendar, const uint8_t* days_of_mon
         loopday = calendar->tm_mday;
         loopmonth = calendar->tm_mon;
         // First: Check for w_flags up to 2 days earlier, but at most the 1st (bit 0 (LW) is checked separately)
-        desired_day = next_set_bit(w_flags, day_of_month, (day_of_month-2 > 0 ? day_of_month-2 : 1), &notfound);
+        desired_day = next_set_bit(w_flags, day_of_month, (day_of_month - 2 > 0 ? day_of_month - 2 : 1), &notfound);
         if (!notfound) {
             // Check first which day is the "desired" day (xxW):
             // - Is current day a Monday?
@@ -432,7 +446,7 @@ static unsigned int handle_w_dom(struct tm* calendar, const uint8_t* days_of_mon
                     *res_out = 1;
                     return 0;
                 }
-                if ( calendar->tm_wday == 6) {
+                if (calendar->tm_wday == 6) {
                     // Go 2 days forward for SAT (6); SUN is handled by the 1st case
                     err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 2);
                     if (err) {
@@ -455,7 +469,7 @@ static unsigned int handle_w_dom(struct tm* calendar, const uint8_t* days_of_mon
                 return 0;
             }
             // check if month rolled over
-            if( loopmonth < calendar->tm_mon ) {
+            if (loopmonth < calendar->tm_mon) {
                 // check if LW flag is set, if yes, go back to last day of "current month"
                 if (cron_getBit(w_flags, 0)) {
                     err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
@@ -474,7 +488,8 @@ static unsigned int handle_w_dom(struct tm* calendar, const uint8_t* days_of_mon
             day_of_month = calendar->tm_mday;
         }
 
-        if ( (cron_getBit(w_flags, day_of_month) && !cron_getBit(days_of_month, day_of_month)) || check_weekday) { // weekday checking required?
+        if ((cron_getBit(w_flags, day_of_month) && !cron_getBit(days_of_month, day_of_month)) ||
+            check_weekday) { // weekday checking required?
             // Is it a weekday? If so, great! It can be returned directly, and the following condition will be irrelevant.
             // Otherwise...
             if (calendar->tm_wday == 6 || !calendar->tm_wday) { // SAT or SUN
@@ -536,8 +551,9 @@ static unsigned int handle_w_dom(struct tm* calendar, const uint8_t* days_of_mon
  * @param res_out Integer pointer for passing out error values
  * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
  */
-static unsigned int handle_l_flag(struct tm* calendar, const uint8_t* days_of_month, unsigned int day_of_month, const uint8_t* days_of_week, uint8_t lw_flags, uint8_t* reset_fields, int* res_out)
-{
+static unsigned int
+handle_l_flag(struct tm *calendar, const uint8_t *days_of_month, unsigned int day_of_month, const uint8_t *days_of_week,
+              uint8_t lw_flags, uint8_t *reset_fields, int *res_out) {
     int err;
     unsigned int count = 0;
     const unsigned int max = 366;
@@ -559,7 +575,7 @@ static unsigned int handle_l_flag(struct tm* calendar, const uint8_t* days_of_mo
                     *res_out = 1;
                     return 0;
                 }
-                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
+                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
                 if (err) {
                     *res_out = 1;
                     return 0;
@@ -584,7 +600,7 @@ static unsigned int handle_l_flag(struct tm* calendar, const uint8_t* days_of_mo
                 }
 
                 // Verify assumed trigger day is not behind startday
-                if ( (startmonth == (unsigned int) calendar->tm_mon) && (startday > day_of_month) ) {
+                if ((startmonth == (unsigned int) calendar->tm_mon) && (startday > day_of_month)) {
                     // Startmonth hasn't changed, but trigger day is before initial day
                     reset_all(calendar, reset_fields);
                     while (calendar->tm_mon - startmonth == 0) {
@@ -606,18 +622,17 @@ static unsigned int handle_l_flag(struct tm* calendar, const uint8_t* days_of_mo
             uint8_t offset_mask[4];
 
             for (int i = 0; i < 4; i++) {
-                memset(&(offset_mask[i]), ~(*(days_of_month+i)), 1);
+                memset(&(offset_mask[i]), ~(*(days_of_month + i)), 1);
             }
 
-            for (unsigned int loop = 0; loop < max; loop++)
-            {
+            for (unsigned int loop = 0; loop < max; loop++) {
                 // Goto first day of following month
                 err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
                 if (err) {
                     *res_out = 1;
                     return 0;
                 }
-                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon +1);
+                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
                 if (err) {
                     *res_out = 1;
                     return 0;
@@ -633,7 +648,7 @@ static unsigned int handle_l_flag(struct tm* calendar, const uint8_t* days_of_mo
 
                 // If offset is set, go back offset days from end of month
                 if ((offset = next_set_bit(offset_mask, CRON_MAX_DAYS_OF_MONTH, 1, &err))) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, - (int) offset);
+                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -(int) offset);
                     if (err) {
                         *res_out = 1;
                         return 0;
@@ -685,13 +700,15 @@ static unsigned int handle_l_flag(struct tm* calendar, const uint8_t* days_of_mo
             break;
     }
     // Finally, check if the planned date has moved in comparison to the start. If so, reset appropriate calendar fields for recalculation
-    if ( (startday != day_of_month) || (startmonth != (unsigned int) calendar->tm_mon) ) {
+    if ((startday != day_of_month) || (startmonth != (unsigned int) calendar->tm_mon)) {
         reset_all(calendar, reset_fields);
     }
     return day_of_month;
 }
 
-static unsigned int find_next_day(struct tm* calendar, const uint8_t* days_of_month, unsigned int day_of_month, const uint8_t* days_of_week, unsigned int day_of_week, uint8_t l_flags, const uint8_t* w_flags, uint8_t* reset_fields, int* res_out) {
+static unsigned int
+find_next_day(struct tm *calendar, const uint8_t *days_of_month, unsigned int day_of_month, const uint8_t *days_of_week,
+              unsigned int day_of_week, uint8_t l_flags, const uint8_t *w_flags, uint8_t *reset_fields, int *res_out) {
     int err;
     unsigned int count = 0;
     int notfound = 0;
@@ -700,9 +717,8 @@ static unsigned int find_next_day(struct tm* calendar, const uint8_t* days_of_mo
         day_of_month = handle_l_flag(calendar, days_of_month, day_of_month, days_of_week, l_flags, reset_fields,
                                      res_out);
         if (*res_out) goto return_error;
-    }
-    else {
-        next_set_bit(w_flags, CRON_MAX_DAYS_OF_MONTH , 0, &notfound); // check for W day presence
+    } else {
+        next_set_bit(w_flags, CRON_MAX_DAYS_OF_MONTH, 0, &notfound); // check for W day presence
         if (notfound) {
             while ((!cron_getBit(days_of_month, day_of_month) || !cron_getBit(days_of_week, day_of_week)) &&
                    count++ < max) {
@@ -738,7 +754,7 @@ static unsigned int find_next_day(struct tm* calendar, const uint8_t* days_of_mo
  * @param dot Year of the original time. If no trigger is found even 4 years in the future, an error code (-1) is returned.
  * @return Error code: 0 on success, other values (e. g. -1) mean failure.
  */
-static int do_next(const cron_expr* expr, struct tm* calendar, unsigned int dot) {
+static int do_next(const cron_expr *expr, struct tm *calendar, unsigned int dot) {
     int res = 0;
     uint8_t reset_fields = 0xFE; // First bit (seconds) should always be unset, because if minutes roll over (and seconds didn't), seconds need to be reset as well
     uint8_t second_reset_fields = 0xFF; // Only used for seconds; they shouldn't reset themselves after finding a match
@@ -811,7 +827,8 @@ static int do_next(const cron_expr* expr, struct tm* calendar, unsigned int dot)
         }
 
         month = calendar->tm_mon; /*day already adds one if no day in same month is found*/
-        update_month = find_next(expr->months, CRON_MAX_MONTHS-1, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, &reset_fields,
+        update_month = find_next(expr->months, CRON_MAX_MONTHS - 1, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR,
+                                 &reset_fields,
                                  &res); // max-1 because month bits are only set from 0 to 11
         if (0 != res) goto return_result;
         if (month != update_month) {
@@ -824,7 +841,7 @@ static int do_next(const cron_expr* expr, struct tm* calendar, unsigned int dot)
     return res;
 }
 
-static int to_upper(char* str) {
+static int to_upper(char *str) {
     if (!str) return 1;
     int i;
     for (i = 0; '\0' != str[i]; i++) {
@@ -833,16 +850,16 @@ static int to_upper(char* str) {
     return 0;
 }
 
-static char* to_string(int num) {
+static char *to_string(int num) {
     if (abs(num) >= CRON_MAX_NUM_TO_SRING) return NULL;
-    char* str = (char*) cronMalloc(CRON_NUM_OF_DIGITS(num) + 1);
+    char *str = (char *) cronMalloc(CRON_NUM_OF_DIGITS(num) + 1);
     if (!str) return NULL;
     int res = sprintf(str, "%d", num);
     if (res < 0) return NULL;
     return str;
 }
 
-static char* str_replace(char *orig, const char *rep, const char *with) {
+static char *str_replace(char *orig, const char *rep, const char *with) {
     char *result; /* the return string */
     char *ins; /* the next insert point */
     char *tmp; /* varies */
@@ -867,7 +884,7 @@ static char* str_replace(char *orig, const char *rep, const char *with) {
      ins points to the next occurrence of rep in orig
      orig points to the remainder of orig after "end of rep"
      */
-    tmp = result = (char*) cronMalloc(strlen(orig) + (len_with - len_rep) * count + 1);
+    tmp = result = (char *) cronMalloc(strlen(orig) + (len_with - len_rep) * count + 1);
     if (!result) return NULL;
 
     while (count--) {
@@ -881,8 +898,8 @@ static char* str_replace(char *orig, const char *rep, const char *with) {
     return result;
 }
 
-static unsigned int parse_uint(const char* str, int* errcode) {
-    char* endptr;
+static unsigned int parse_uint(const char *str, int *errcode) {
+    char *endptr;
     errno = 0;
     long int l = strtol(str, &endptr, 10);
     if (errno == ERANGE || *endptr != '\0' || l < 0 || l > INT_MAX) {
@@ -894,16 +911,16 @@ static unsigned int parse_uint(const char* str, int* errcode) {
     }
 }
 
-static char** split_str(const char* str, char del, size_t* len_out) {
+static char **split_str(const char *str, char del, size_t *len_out) {
     size_t i;
     size_t stlen = 0;
     size_t len = 0;
     int accum = 0;
-    char* buf = NULL;
-    char** res = NULL;
+    char *buf = NULL;
+    char **res = NULL;
     size_t bi = 0;
     size_t ri = 0;
-    char* tmp;
+    char *tmp;
 
     if (!str) goto return_error;
     for (i = 0; '\0' != str[i]; i++) {
@@ -927,10 +944,10 @@ static char** split_str(const char* str, char del, size_t* len_out) {
     }
     if (0 == len) return NULL;
 
-    buf = (char*) cronMalloc(stlen + 1);
+    buf = (char *) cronMalloc(stlen + 1);
     if (!buf) goto return_error;
     memset(buf, 0, stlen + 1);
-    res = (char**) cronMalloc(len * sizeof(char*));
+    res = (char **) cronMalloc(len * sizeof(char *));
     if (!res) goto return_error;
 
     for (i = 0; i < stlen; i++) {
@@ -965,13 +982,13 @@ static char** split_str(const char* str, char del, size_t* len_out) {
     return NULL;
 }
 
-static char* replace_ordinals(char* value, const char** arr, size_t arr_len) {
+static char *replace_ordinals(char *value, const char **arr, size_t arr_len) {
     size_t i;
-    char* cur = value;
-    char* res = NULL;
+    char *cur = value;
+    char *res = NULL;
     int first = 1;
     for (i = 0; i < arr_len; i++) {
-        char* strnum = to_string((int) i);
+        char *strnum = to_string((int) i);
         if (!strnum) {
             if (!first) {
                 cronFree(cur);
@@ -994,7 +1011,7 @@ static char* replace_ordinals(char* value, const char** arr, size_t arr_len) {
     return res;
 }
 
-static int has_char(char* str, char ch) {
+static int has_char(char *str, char ch) {
     size_t i;
     size_t len = 0;
     if (!str) return 0;
@@ -1008,12 +1025,11 @@ static int has_char(char* str, char ch) {
 static int hash_seed = 0;
 static cron_custom_hash_fn fn = NULL;
 
-void cron_init_hash(int seed)
-{
+void cron_init_hash(int seed) {
     hash_seed = seed;
 }
-void cron_init_custom_hash_fn(cron_custom_hash_fn func)
-{
+
+void cron_init_custom_hash_fn(cron_custom_hash_fn func) {
     fn = func;
 }
 
@@ -1029,8 +1045,8 @@ void cron_init_custom_hash_fn(cron_custom_hash_fn func)
  * @param error Error string in which error descriptions will be stored, if they happen. Just needs to be a const char** pointer. (See usage of get_range)
  * @return New char* with replaced H, to be used instead of field.
  */
-static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsigned int max, cron_custom_hash_fn hashFn, const char** error)
-{
+static char *replace_hashed(char *field, unsigned int n, unsigned int min, unsigned int max, cron_custom_hash_fn hashFn,
+                            const char **error) {
     unsigned int i = 0;
     unsigned int value;
     char *newField = NULL;
@@ -1047,8 +1063,7 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
     // Generate random value
     if (hashFn) {
         value = hashFn(hash_seed, n);
-    }
-    else {
+    } else {
         int newSeed = rand();
         srand(hash_seed);
         while (n >= i++) {
@@ -1057,12 +1072,12 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
         srand(newSeed);
     }
     // ensure value is below max...
-    value %= max-min;
+    value %= max - min;
     // and above min
     value += min;
 
     // Check if a custom range is present, and get rid of it
-    if ( has_char(field, '(') ) {
+    if (has_char(field, '(')) {
         sscanf(field, "H(%5[-0123456789])", innerString);
         sprintf(customRemover, "(%s)", innerString);
         field = str_replace(field, customRemover, NULL);
@@ -1083,10 +1098,10 @@ static char* replace_hashed(char* field, unsigned int n, unsigned int min, unsig
     return newField;
 }
 
-static unsigned int* get_range(char* field, unsigned int min, unsigned int max, const char** error) {
-    char** parts = NULL;
+static unsigned int *get_range(char *field, unsigned int min, unsigned int max, const char **error) {
+    char **parts = NULL;
     size_t len = 0;
-    unsigned int* res = (unsigned int*) cronMalloc(2 * sizeof(unsigned int));
+    unsigned int *res = (unsigned int *) cronMalloc(2 * sizeof(unsigned int));
     if (!res) goto return_error;
 
     res[0] = 0;
@@ -1144,21 +1159,21 @@ static unsigned int* get_range(char* field, unsigned int min, unsigned int max, 
     return NULL;
 }
 
-void cron_setBit(uint8_t* rbyte, unsigned int idx) {
+void cron_setBit(uint8_t *rbyte, unsigned int idx) {
     uint8_t j = idx / 8;
     uint8_t k = idx % 8;
 
     rbyte[j] |= (1 << k);
 }
 
-void cron_delBit(uint8_t* rbyte, unsigned int idx) {
+void cron_delBit(uint8_t *rbyte, unsigned int idx) {
     uint8_t j = idx / 8;
     uint8_t k = idx % 8;
 
     rbyte[j] &= ~(1 << k);
 }
 
-uint8_t cron_getBit(const uint8_t* rbyte, unsigned int idx) {
+uint8_t cron_getBit(const uint8_t *rbyte, unsigned int idx) {
     uint8_t j = idx / 8;
     uint8_t k = idx % 8;
 
@@ -1178,12 +1193,12 @@ uint8_t cron_getBit(const uint8_t* rbyte, unsigned int idx) {
  * @param max Max possible value for current field, not included in interval
  * @param error String output of error, if one occurred
  */
-void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsigned int max, const char** error) {
+void set_number_hits(const char *value, uint8_t *target, unsigned int min, unsigned int max, const char **error) {
     size_t i;
     unsigned int i1;
     size_t len = 0;
 
-    char** fields = split_str(value, ',', &len);
+    char **fields = split_str(value, ',', &len);
     if (!fields) {
         *error = "Comma split error";
         goto return_result;
@@ -1193,7 +1208,7 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
         if (!has_char(fields[i], '/')) {
             /* Not an incrementer so it must be a range (possibly empty) */
 
-            unsigned int* range = get_range(fields[i], min, max, error);
+            unsigned int *range = get_range(fields[i], min, max, error);
 
             if (*error) {
                 if (range) {
@@ -1211,13 +1226,13 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 
         } else {
             size_t len2 = 0;
-            char** split = split_str(fields[i], '/', &len2);
+            char **split = split_str(fields[i], '/', &len2);
             if (len2 != 2) {
                 *error = "Incrementer doesn't have two fields";
                 free_splitted(split, len2);
                 goto return_result;
             }
-            unsigned int* range = get_range(split[0], min, max, error);
+            unsigned int *range = get_range(split[0], min, max, error);
             if (*error) {
                 if (range) {
                     cronFree(range);
@@ -1258,7 +1273,7 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 }
 
 static char *replace_h_entry(char *field, unsigned int pos, unsigned int min, const char **error) {
-    char* has_h = strchr(field, 'H');
+    char *has_h = strchr(field, 'H');
     if (has_h == NULL) {
         return field;
     }
@@ -1267,31 +1282,32 @@ static char *replace_h_entry(char *field, unsigned int pos, unsigned int min, co
     // minBuf is 0xFF to see if it has been altered/read successfully, since 0 is a valid value for it
     unsigned int minBuf = 0xFF, maxBuf = 0;
 
-    if(*(has_h + 1) == '/') { /* H before an iterator */
-        sscanf(has_h, "H/%2u", &customMax); // get value of iterator, so it will be used as maximum instead of standard maximum for field
+    if (*(has_h + 1) == '/') { /* H before an iterator */
+        sscanf(has_h, "H/%2u",
+               &customMax); // get value of iterator, so it will be used as maximum instead of standard maximum for field
         if (!customMax) { /* iterator might have been specified as an ordinal instead... */
             *error = "Hashed: Iterator error";
             return field;
         }
     }
-    if ((has_h != field) && (*(has_h - 1) == '/') ) { /* H not allowed as iterator */
+    if ((has_h != field) && (*(has_h - 1) == '/')) { /* H not allowed as iterator */
         *error = "Hashed: 'H' not allowed as iterator";
         return field;
     }
     if (*(has_h + 1) == '-' || \
-        (has_h != field && *(has_h - 1) == '-') ) { // 'H' not starting field, so may be the end of a range
+        (has_h != field && *(has_h - 1) == '-')) { // 'H' not starting field, so may be the end of a range
         *error = "'H' is not allowed for use in ranges";
         return field;
     }
     // Test if custom Range is specified
-    if (*(has_h + 1) == '(' ) {
+    if (*(has_h + 1) == '(') {
         sscanf(has_h, "H(%2u-%2u)", &minBuf, &maxBuf);
-        if ( !maxBuf || \
+        if (!maxBuf || \
                 (minBuf == 0xFF) || \
                 (minBuf > maxBuf) || \
                 (minBuf < min) || \
                 // if a customMax is present: Is read maximum bigger than it? (which it shouldn't be)
-             (customMax ? maxBuf > customMax : 0)
+            (customMax ? maxBuf > customMax : 0)
                 ) {
             *error = "'H' custom range error";
             return field;
@@ -1335,11 +1351,10 @@ static char *replace_h_entry(char *field, unsigned int pos, unsigned int min, co
     return field;
 }
 
-static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min, const char** error)
-{
-    char* has_h = strchr(field, 'H');
+static char *check_and_replace_h(char *field, unsigned int pos, unsigned int min, const char **error) {
+    char *has_h = strchr(field, 'H');
     if (has_h) {
-        char  *accum_field = NULL;
+        char *accum_field = NULL;
         char **subfields = NULL;
         size_t subfields_len = 0;
         // Check if Field contains ',', if so, split into multiple subfields, and replace in each (with same position no)
@@ -1365,7 +1380,7 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
                 res_len += res_lens[i];
             }
             // Allocate space for the full string: Result lengths + (result count - 1) for the commas + 1 for '\0'
-            accum_field = (char *) cronMalloc(res_len + subfields_len );
+            accum_field = (char *) cronMalloc(res_len + subfields_len);
             if (accum_field == NULL) {
                 *error = "Failed to merge 'H' in list";
                 goto return_error;
@@ -1381,8 +1396,9 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
                 strncpy(tracking, subfields[i], res_lens[i]);
                 tracking += res_lens[i];
                 // Don't append comma to last list entry
-                if (i < subfields_len-1) {
-                    strncpy(tracking, ",", 2); // using 2 to ensure the string ends in '\0', tracking will be set to that char
+                if (i < subfields_len - 1) {
+                    strncpy(tracking, ",",
+                            2); // using 2 to ensure the string ends in '\0', tracking will be set to that char
                     tracking += 1;
                 }
             }
@@ -1402,11 +1418,11 @@ static char* check_and_replace_h(char* field, unsigned int pos, unsigned int min
     return field;
 }
 
-static void set_months(char* value, uint8_t* targ, const char** error) {
+static void set_months(char *value, uint8_t *targ, const char **error) {
     int err;
     unsigned int i;
 
-    char* replaced = NULL;
+    char *replaced = NULL;
 
     err = to_upper(value);
     if (err) return;
@@ -1430,14 +1446,14 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
     }
 }
 
-static void set_days(char* field, uint8_t* targ, int max, const char** error) {
+static void set_days(char *field, uint8_t *targ, int max, const char **error) {
     if (1 == strlen(field) && '?' == field[0]) {
         field[0] = '*';
     }
     set_number_hits(field, targ, 0, max, error);
 }
 
-static void set_days_of_month(char* field, uint8_t* targ, const char** error) {
+static void set_days_of_month(char *field, uint8_t *targ, const char **error) {
     /* Days of month start with 1 (in Cron and Calendar) so add one */
     set_days(field, targ, CRON_MAX_DAYS_OF_MONTH, error);
     /* ... and remove it from the front */
@@ -1447,9 +1463,8 @@ static void set_days_of_month(char* field, uint8_t* targ, const char** error) {
 
 }
 
-static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_expr* target, const char** error)
-{
-    char* has_l = strchr(field, 'L');
+static void l_check(char *field, unsigned int pos, unsigned int *offset, cron_expr *target, const char **error) {
+    char *has_l = strchr(field, 'L');
     int err;
 
     if (has_l) {
@@ -1461,22 +1476,22 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
                     return;
                 }
                 // Ensure no specific days are set in day of week
-                if ( (target->days_of_week[0] ^ 0x7f) != 0 ) {
+                if ((target->days_of_week[0] ^ 0x7f) != 0) {
                     *error = "Cannot set specific days of week if using 'L' in days of month.";
                     return;
                 }
                 // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
                 // Also, char following 'L' has to be either '-', 'W' or '\0'
-                if ( (has_char(field, ',') || has_char(field, '/')) || \
-              !( (*(field+1) == '-') || (*(field+1) == 'W') || (*(field+1) == '\0') ) ) {
+                if ((has_char(field, ',') || has_char(field, '/')) || \
+              !((*(field + 1) == '-') || (*(field + 1) == 'W') || (*(field + 1) == '\0'))) {
                     *error = "L only allowed in combination before an offset or before W in 'day of month' field";
                     return;
                 }
                 cron_setBit(target->months, CRON_L_DOM_BIT);
                 if (has_char(field, '-')) {
-                    if ( *(has_l+1) == '-' && has_l == field) {
+                    if (*(has_l + 1) == '-' && has_l == field) {
                         // offset is specified, L is starting dom
-                        if(offset) {
+                        if (offset) {
                             *offset = parse_uint(has_l + 2, &err);
                         } else {
                             *error = "Offset found in 'day of month', but no valid pointer given";
@@ -1504,11 +1519,11 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
             }
                 break;
             case CRON_FIELD_DAY_OF_WEEK: {
-                if ( has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
+                if (has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
                     *error = "L only allowed in combination with one day in 'day of week' field";
                     return;
                 }
-                if ( (has_l == field) && (strlen(field) == 1) ) {
+                if ((has_l == field) && (strlen(field) == 1)) {
                     *has_l = '0'; // Only L, so replace with sunday
                 } else {
                     cron_setBit(target->months, CRON_L_DOW_BIT);
@@ -1523,11 +1538,10 @@ static void l_check(char* field, unsigned int pos, unsigned int* offset, cron_ex
     }
 }
 
-static char* w_check(char* field, cron_expr* target, const char** error)
-{
-    char* has_w = strchr(field, 'W');
-    char* newField = NULL;
-    char** splitField = NULL;
+static char *w_check(char *field, cron_expr *target, const char **error) {
+    char *has_w = strchr(field, 'W');
+    char *newField = NULL;
+    char **splitField = NULL;
     size_t len_out = 0;
 
     unsigned int w_day = 0;
@@ -1535,7 +1549,7 @@ static char* w_check(char* field, cron_expr* target, const char** error)
 
     // Only available for dom, so no pos checking needed
     if (has_w) {
-        newField = (char *)cronMalloc(sizeof(char) * strlen(field) );
+        newField = (char *) cronMalloc(sizeof(char) * strlen(field));
         if (!newField) {
             *error = "w_check: newField malloc error";
             goto return_error;
@@ -1543,12 +1557,12 @@ static char* w_check(char* field, cron_expr* target, const char** error)
         memset(newField, 0, sizeof(char) * strlen(field));
         char *tracking = newField;
         // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-        if ( has_char(field, '/') || has_char(field, '-')) {
+        if (has_char(field, '/') || has_char(field, '-')) {
             *error = "W not allowed in iterators or ranges in 'day of month' field";
             goto return_error;
         }
         // Ensure no specific days are set in day of week
-        if ( (target->days_of_week[0] ^ 0x7f) != 0 ) {
+        if ((target->days_of_week[0] ^ 0x7f) != 0) {
             *error = "Cannot set specific days of week when using 'W' in days of month.";
             goto return_error;
         }
@@ -1558,13 +1572,13 @@ static char* w_check(char* field, cron_expr* target, const char** error)
             goto return_error;
         }
         for (size_t i = 0; i < len_out; i++) {
-            if ( (has_w = strchr(splitField[i], 'W')) ) {
+            if ((has_w = strchr(splitField[i], 'W'))) {
                 // Ensure nothing follows 'W'
                 if (*(has_w + 1) != '\0') {
                     *error = "If W is used, 'day of month' element needs to end with it";
                     goto return_error;
                 }
-                if ( !(strcmp(splitField[i], "LW"))) {
+                if (!(strcmp(splitField[i], "LW"))) {
                     cron_setBit(target->w_flags, 0);
                 } else {
                     *has_w = '\0';
@@ -1596,12 +1610,11 @@ static char* w_check(char* field, cron_expr* target, const char** error)
     return field;
 }
 
-void cron_parse_expr(const char* expression, cron_expr* target, const char** error)
-{
-    const char* err_local;
+void cron_parse_expr(const char *expression, cron_expr *target, const char **error) {
+    const char *err_local;
     size_t len = 0;
-    char** fields = NULL;
-    char* days_replaced = NULL;
+    char **fields = NULL;
+    char *days_replaced = NULL;
     unsigned int offset = 0;
     int notfound = 0;
     if (!error) {
@@ -1658,7 +1671,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     }
 
     // Days of month: Ensure L-flag for dow is unset, unless the field is '*'
-    if ( (strcmp(fields[3], "*") != 0) && (strcmp(fields[3], "?") != 0)) {
+    if ((strcmp(fields[3], "*") != 0) && (strcmp(fields[3], "?") != 0)) {
         if (cron_getBit(target->months, CRON_L_DOW_BIT)) {
             *error = "Cannot specify specific days of month when using 'L' in days of week.";
             goto return_res;
@@ -1675,7 +1688,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     // If w flags are set, days of month can be empty (e.g. "LW" or "9W")
     // So parsing has to happen if the field str len > 0, but can be skipped if a W flag was found
     next_set_bit(target->w_flags, CRON_MAX_DAYS_OF_MONTH, 0, &notfound);
-    if ( strlen(fields[3]) || notfound ) set_days_of_month(fields[3], target->days_of_month, error);
+    if (strlen(fields[3]) || notfound) set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
     if (offset) cron_delBit(target->days_of_month, offset);
 
@@ -1688,7 +1701,7 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     free_splitted(fields, len);
 }
 
-time_t cron_next(const cron_expr* expr, time_t date) {
+time_t cron_next(const cron_expr *expr, time_t date) {
     /*
      The plan:
 
@@ -1710,7 +1723,7 @@ time_t cron_next(const cron_expr* expr, time_t date) {
     if (!expr) return CRON_INVALID_INSTANT;
     struct tm calval;
     memset(&calval, 0, sizeof(struct tm));
-    struct tm* calendar = cron_time(&date, &calval);
+    struct tm *calendar = cron_time(&date, &calval);
     if (!calendar) return CRON_INVALID_INSTANT;
     time_t original = cron_mktime(calendar);
     if (CRON_INVALID_INSTANT == original) return CRON_INVALID_INSTANT;

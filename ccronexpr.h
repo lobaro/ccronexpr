@@ -22,14 +22,16 @@
  */
 
 #ifndef CCRONEXPR_H
-#define	CCRONEXPR_H
+#define CCRONEXPR_H
 
 #if defined(__cplusplus) && !defined(CRON_COMPILE_AS_CXX)
 extern "C" {
 #endif
 
 #ifndef ANDROID
+
 #include <time.h>
+
 #else /* ANDROID */
 #include <time64.h>
 #endif /* ANDROID */
@@ -70,7 +72,7 @@ typedef struct {
  *        must be freed by client using 'cron_expr_free' function.
  *        NULL is returned on error.
  */
-void cron_parse_expr(const char* expression, cron_expr* target, const char** error);
+void cron_parse_expr(const char *expression, cron_expr *target, const char **error);
 
 /**
  * Uses the specified expression to calculate the next 'fire' date after
@@ -82,14 +84,16 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
  * @param date start date to start calculation from
  * @return next 'fire' date in case of success, '((time_t) -1)' in case of error.
  */
-time_t cron_next(const cron_expr* expr, time_t date);
+time_t cron_next(const cron_expr *expr, time_t date);
 
 /**
  * uint8_t* replace char* for storing hit dates, set_bit and get_bit are used as handlers
  */
-uint8_t cron_getBit(const uint8_t* rbyte, unsigned int idx);
-void cron_setBit(uint8_t* rbyte, unsigned int idx);
-void cron_delBit(uint8_t* rbyte, unsigned int idx);
+uint8_t cron_getBit(const uint8_t *rbyte, unsigned int idx);
+
+void cron_setBit(uint8_t *rbyte, unsigned int idx);
+
+void cron_delBit(uint8_t *rbyte, unsigned int idx);
 
 /**
  * Function for deterministic replacing of 'H' in expression (similar to Jenkins feature)
@@ -99,6 +103,7 @@ void cron_delBit(uint8_t* rbyte, unsigned int idx);
  * returns a hash that is always the same for the same seed and idx
  */
 typedef int (*cron_custom_hash_fn)(int seed, uint8_t idx);
+
 /**
  * Set seed for 'H' replacement number generation, to keep it deterministic.
  * With default hash func, it will only be set when a number is generated and reset to a (previously generated) random number after;
@@ -106,6 +111,7 @@ typedef int (*cron_custom_hash_fn)(int seed, uint8_t idx);
  * @param seed The seed to be used
  */
 void cron_init_hash(int seed);
+
 /**
  * Set a custom hash function to be used for 'H' replacement number generation
  * @param func A function which can generate pseudo-random numbers based on a seed.
@@ -120,11 +126,11 @@ void cron_init_custom_hash_fn(cron_custom_hash_fn func);
  * 
  * @param expr parsed cron expression to free
  */
-void cron_expr_free(cron_expr* expr);
+void cron_expr_free(cron_expr *expr);
 
 #if defined(__cplusplus) && !defined(CRON_COMPILE_AS_CXX)
 } /* extern "C"*/
 #endif
 
-#endif	/* CCRONEXPR_H */
+#endif    /* CCRONEXPR_H */
 
