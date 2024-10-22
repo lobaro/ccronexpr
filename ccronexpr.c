@@ -1529,6 +1529,7 @@ static char* w_check(char* field, cron_expr* target, const char** error)
             goto return_error;
         }
         memset(newField, 0, sizeof(char) * strlen(field));
+        char *tracking = newField;
         // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
         if ( has_char(field, '/') || has_char(field, '-')) {
             *error = "W not allowed in iterators or ranges in 'day of month' field";
@@ -1563,7 +1564,14 @@ static char* w_check(char* field, cron_expr* target, const char** error)
                     cron_setBit(target->w_flags, w_day);
                 }
             } else {
-                strcat(newField, splitField[i]);
+                if (tracking != newField) {
+                    // A field was already added. Add a comma first
+                    strncpy(tracking, ",", 2); // ensure string ends in '\0', tracking will be set to it
+                    tracking += 1;
+                }
+                size_t field_len = strnlen(splitField[i], CRON_MAX_STR_LEN_TO_SPLIT);
+                strncpy(tracking, splitField[i], field_len);
+                tracking += field_len;
             }
         }
         free_splitted(splitField, len_out);
