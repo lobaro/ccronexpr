@@ -1653,6 +1653,13 @@ void cron_parse_expr(const char *expression, cron_expr *target, const char **err
     set_number_hits(fields[2], target->hours, 0, CRON_MAX_HOURS, error);
     if (*error) goto return_res;
 
+    // Don't allow specific values for DOM and DOW at the same time
+    if ( ((strcmp(fields[3], "*") != 0) && (strcmp(fields[3], "?") != 0)) &&
+            ((strcmp(fields[5], "*") != 0) && (strcmp(fields[5], "?") != 0)) ) {
+        *error = "Cannot set specific values for day of month AND day of week";
+        goto return_res;
+    }
+
     to_upper(fields[5]);
     days_replaced = replace_ordinals(fields[5], DAYS_ARR, CRON_DAYS_ARR_LEN);
     days_replaced = check_and_replace_h(days_replaced, 5, 1, error);
