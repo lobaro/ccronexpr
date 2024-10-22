@@ -503,8 +503,9 @@ void test_parse() {
     assert(check_same("* * * * 2 *", "* * * * Feb *"));
     assert(check_same("*  *  * *  1 *", "* * * * 1 *"));
     assert(check_same("* * * * 1 L", "* * * * 1 SUN"));
+    // Cannot set specific days of month AND days of week
     assert(check_same("* * * * * *",
-                      "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19-59,H 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18-59,H 0,1,2,3,4,5,6,7,8,9,10,11-23,H 1,2,3,4,5,6,7,8,9,10,11,12,13,14-31,H jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec,H mon,tue,wed,thu,fri,sat,sun,H"));
+                      "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19-59,H 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18-59,H 0,1,2,3,4,5,6,7,8,9,10,11-23,H * jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec,H mon,tue,wed,thu,fri,sat,sun,H"));
     //assert(check_same("0 0 15 1,16,L * *", "0 0 15 1,L,16 * *"));
     //assert(check_expr_valid("0 0 15 1,16,L * *"));
     //assert(check_expr_valid("0 0 15 1,L,16 * *"));
@@ -609,6 +610,11 @@ void test_parse() {
     assert(check_expr_invalid("H H H * H(-1-8) *"));
     assert(check_expr_invalid("0 0\\  0 * * *")); // no "escaping"
     assert(check_expr_invalid("0 0 \\ 0 * * *")); // no "escaping"
+    // Cannot set specific days of month AND days of week
+    assert(check_expr_invalid("0 0 0 1 * 1"));
+    assert(check_expr_invalid("0 0 0 H * SUN"));
+    assert(check_expr_invalid("0 0 0 2 * H"));
+    assert(check_expr_invalid("0 0 0 2W * H"));
 }
 
 void test_bits() {
