@@ -502,6 +502,14 @@ void test_parse() {
     assert(check_expr_valid("H H H(1-3),H(0-12) H H *"));
     assert(check_expr_valid("H,H(0-59) H H H H *"));
     cron_init_custom_hash_fn(testing_hash_function);
+    // Check H can be used in lists
+    assert(check_expr_valid("H(30-32),H(0-59) H H,H(1-2),H(3-5) H H *"));
+    assert(check_expr_valid("2,6,H,H,H H(0-9),H(7-15) H(1-3),H(1-3) H H *"));
+    assert(check_expr_valid("2,6,H,H,H,7 H(0-9),H(7-15) H(1-3),H(1-3) 1,H(2-27),15 H *"));
+    assert(check_expr_valid("2,6,H,H,H,7 H(0-9),H(7-15) H(1-3),H(1-3) 1,H(2-27),15W H *"));
+    assert(check_expr_valid("2,6,H,H,H,7 H(0-9),H(7-15) H(1-3),H(1-3) 1,H(2-27),15W,LW H *"));
+    assert(check_expr_valid("H,H H 12,H,7 ? H H,1,H(3-6)"));
+    assert(check_expr_valid("H,H H 12,H,7 ? H H,1,H(3-6),THU"));
 
     assert(check_expr_invalid("77 * * * * *"));
     assert(check_expr_invalid("44-77 * * * * *"));
