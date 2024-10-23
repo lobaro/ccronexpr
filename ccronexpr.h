@@ -57,6 +57,7 @@ typedef struct {
     uint8_t days_of_week[1];
     uint8_t days_of_month[4];
     uint8_t w_flags[4]; // Bits 0-30 for days 1-31, bit 31 for 'L'
+    uint8_t l_offset[4]; // Offset days for L in day of month, bits 0-30 are used
     uint8_t months[2];
 } cron_expr;
 

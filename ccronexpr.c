@@ -27,7 +27,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
-#include <stdarg.h>
 
 #include "ccronexpr.h"
 
@@ -1463,79 +1462,165 @@ static void set_days_of_month(char *field, uint8_t *targ, const char **error) {
 
 }
 
-static void l_check(char *field, unsigned int pos, unsigned int *offset, cron_expr *target, const char **error) {
+static char *replace_l_entry(char *field, unsigned int pos, cron_expr *target, const char **error) {
     char *has_l = strchr(field, 'L');
-    int err;
-
-    if (has_l) {
-        switch (pos) {
-            case CRON_FIELD_DAY_OF_MONTH: {
-                // Ensure nothing is in field before L
-                if (has_l != field) {
-                    *error = "L only allowed as first and only option (with an offset or W) in 'day of month' field";
-                    return;
-                }
-                // Ensure no specific days are set in day of week
-                if ((target->days_of_week[0] ^ 0x7f) != 0) {
-                    *error = "Cannot set specific days of week if using 'L' in days of month.";
-                    return;
-                }
-                // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-                // Also, char following 'L' has to be either '-', 'W' or '\0'
-                if ((has_char(field, ',') || has_char(field, '/')) || \
-              !((*(field + 1) == '-') || (*(field + 1) == 'W') || (*(field + 1) == '\0'))) {
-                    *error = "L only allowed in combination before an offset or before W in 'day of month' field";
-                    return;
-                }
-                cron_setBit(target->months, CRON_L_DOM_BIT);
-                if (has_char(field, '-')) {
-                    if (*(has_l + 1) == '-' && has_l == field) {
-                        // offset is specified, L is starting dom
-                        if (offset) {
-                            *offset = parse_uint(has_l + 2, &err);
-                        } else {
-                            *error = "Offset found in 'day of month', but no valid pointer given";
-                            return;
-                        }
-                        if (err) {
-                            *error = "Error parsing L offset in 'day of month'";
-                            return;
-                        }
-                        if (*offset == 0) {
-                            *error = "Invalid offset: Needs to be > 0";
-                            return;
-                        } else if (*offset > 30) {
-                            // used to break, now it will simply set offset to 30
-                            *offset = 30;
-                        }
-                        // Because dom field will be '*', the offset will be set after set_days_of_month
-                    }
-                }
-                *has_l = '\0';
-                // avoid an empty dom field when string is starting with 'L'
-                if (strlen(field) == 0) {
-                    strcpy(field, "*");
-                }
-            }
-                break;
-            case CRON_FIELD_DAY_OF_WEEK: {
-                if (has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
-                    *error = "L only allowed in combination with one day in 'day of week' field";
-                    return;
-                }
-                if ((has_l == field) && (strlen(field) == 1)) {
-                    *has_l = '0'; // Only L, so replace with sunday
-                } else {
-                    cron_setBit(target->months, CRON_L_DOW_BIT);
-                    *has_l = '\0';
-                }
-            }
-                break;
-            default:
-                *error = "Trying to find 'L' in unsupported field";
-                break;
-        }
+    if (!has_l) {
+        return field;
     }
+    int err;
+    unsigned int offset;
+    char day_char;
+
+    switch (pos) {
+        case CRON_FIELD_DAY_OF_MONTH: {
+            // Possible usage: With offset, L-x days before last day of month
+            // Days of Week and Days of Month cannot be set to specific values in the same cron anymore.
+            // (Sub-)Field needs to start with L!
+            if (has_l != field) {
+                *error = "Element in Day of Month with 'L' doesn't begin with it";
+                return field;
+            }
+
+            // Ensure W day is not the last in a range or iterator of days
+            // Also, char following 'L' has to be either '-', 'W', ',' or '\0'; ',' shouldn't be possible as replace_l_entry is only fed split fields
+            if ( has_char(has_l, '/') || \
+                !((*(has_l + 1) == '-') || (*(has_l + 1) == 'W') || (*(has_l + 1) == ',') || (*(has_l + 1) == '\0'))) {
+                *error = "L only allowed in combination before an offset or before W in 'day of month' field";
+                return field;
+            }
+
+            cron_setBit(target->months, CRON_L_DOM_BIT);
+            if (*(has_l + 1) == '-') {
+                // offset is specified, L is starting dom
+                offset = parse_uint(has_l + 2, &err);
+                if (err) {
+                    *error = "Error parsing L offset in 'day of month'";
+                    return field;
+                }
+                if (offset == 0) {
+                    *error = "Invalid offset: Needs to be > 0";
+                    return field;
+                } else if (offset > 30) {
+                    // used to break, now it will simply set offset to 30
+                    offset = 30;
+                }
+                cron_setBit(&(target->l_offset[offset / 8]), offset % 8);
+            } else {
+                // No offset, set first bit in l_offset
+                cron_setBit(target->l_offset, 0);
+            }
+            *has_l = '\0';
+            // Should result in a 0-length string, which is ok. The offset is stored separately
+            return field;
+        }
+        case CRON_FIELD_DAY_OF_WEEK: {
+            if ( has_char(field, '/') ) {
+                *error = "L can't be used with iterators in 'day of week' field";
+                // Commas shouldn't be present, as sub-fields are input here, '-' for ranges is ok
+                return field;
+            }
+            // 'L' with offset (or none)
+            if (has_l == field) {
+                if (strlen(field) == 1) {
+                    *has_l = '0'; // Only L, so replace with sunday
+                    return field;
+                }
+                if (*(has_l+1) == '-') {
+                    // Convert offset to proper day
+                    offset = parse_uint(has_l+2, &err);
+                    if (err) {
+                        *error = "Error parsing L offset in 'day of month'";
+                        return field;
+                    }
+                    if (offset == 0) {
+                        *error = "Invalid offset: Needs to be > 0";
+                        return field;
+                    } else if (offset > 6) {
+                        // used to break, now it will simply set offset to 6
+                        offset = 6;
+                    }
+                    // print offset instead of l; sprintf will append '\0' automatically
+                    sprintf(has_l, "%1u", 7-offset);
+                }
+            } else {
+                // Weekday L flag: Last x-day of month
+                // Check if char after needs to end (sub-)field
+                if (*(has_l+1) != '\0') {
+                    *error = "'L' in weekday doesn't end field";
+                    return field;
+                }
+                // check if char before 'L' is a decimal for a weekday
+                if (!sscanf(field, "%[01234567]L", &day_char)) {
+                    *error = "'L' in weekday is preceded by non-weekday characters";
+                    return field;
+                }
+                cron_setBit(target->months, CRON_L_DOW_BIT);
+                *has_l = '\0'; // Day will still need to be marked in the week
+            }
+            return field;
+        }
+        default:
+            *error = "Trying to find 'L' in unsupported field";
+            return field;
+    }
+}
+
+static char *l_check(char *field, unsigned int pos, cron_expr *target, const char **error) {
+    char *has_l = strchr(field, 'L');
+
+    if (!has_l) {
+        return field;
+    }
+
+    char *has_comma = strchr(field, ',');
+    char *new_field = field;
+    char **subfields = NULL;
+    size_t subfields_len = 0;
+    if (has_comma) {
+        // split list into subfields
+        subfields = split_str(field, ',', &subfields_len);
+        if (!subfields) {
+            *error = "Failed to split 'L' in list";
+            goto return_res;
+        }
+        size_t orig_len = strnlen(field, CRON_MAX_STR_LEN_TO_SPLIT);
+        // allocate new field, with same length as current field; should be supported, as at least one letter is dropped
+        new_field = (char *) malloc(sizeof(char) * orig_len);
+        if (new_field == NULL) {
+            *error = "Failed to allocate string for 'L' replacement";
+            goto return_res;
+        }
+        memset(new_field, 0, orig_len);
+        char *tracking = new_field;
+        // replace_l_entry for each, return field with replacements
+        for (size_t i = 0; i < subfields_len; i++) {
+            if ((tracking - new_field) > orig_len) {
+                *error = "Failed to merge strings during 'L' replacement: String went oob";
+                goto return_res;
+            }
+            subfields[i] = replace_l_entry(subfields[i], pos, target, error);
+            if (*error != NULL) {
+                goto return_res;
+            }
+            if (strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT) > 0) {
+                // No comma for first field separation, or an empty field
+                if (i > 0) {
+                    strncpy(tracking, ",", 1);
+                    tracking += 1;
+                }
+                strncpy(tracking, subfields[i], strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT));
+                tracking += strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT);
+            }
+        }
+        // Free old field as it was copied
+        cronFree(field);
+    }
+    // Replace the L in the current field
+    new_field = replace_l_entry(field, pos, target, error);
+    return_res:
+    if (subfields) free_splitted(subfields, subfields_len);
+    if (new_field != field) cronFree(field); // field was replaced successfully
+    return new_field;
 }
 
 static char *w_check(char *field, cron_expr *target, const char **error) {
@@ -1615,7 +1700,6 @@ void cron_parse_expr(const char *expression, cron_expr *target, const char **err
     size_t len = 0;
     char **fields = NULL;
     char *days_replaced = NULL;
-    unsigned int offset = 0;
     int notfound = 0;
     if (!error) {
         error = &err_local;
@@ -1667,7 +1751,11 @@ void cron_parse_expr(const char *expression, cron_expr *target, const char **err
         cronFree(days_replaced);
         goto return_res;
     }
-    l_check(days_replaced, 5, NULL, target, error);
+    days_replaced = l_check(days_replaced, 5, target, error);
+    if (*error) {
+        cronFree(days_replaced);
+        goto return_res;
+    }
     set_days(days_replaced, target->days_of_week, CRON_MAX_DAYS_OF_WEEK, error);
     cronFree(days_replaced);
     if (*error) goto return_res;
@@ -1690,14 +1778,19 @@ void cron_parse_expr(const char *expression, cron_expr *target, const char **err
     fields[3] = w_check(fields[3], target, error);
     if (*error) goto return_res;
     // Days of month: Test for L, if there, set 15th bit in months
-    l_check(fields[3], 3, &offset, target, error);
+    fields[3] = l_check(fields[3], 3, target, error);
     if (*error) goto return_res;
-    // If w flags are set, days of month can be empty (e.g. "LW" or "9W")
-    // So parsing has to happen if the field str len > 0, but can be skipped if a W flag was found
+    // If w flags are set, days of month can be empty (e.g. "LW" or "9W" or "L")
+    // So parsing has to happen if the field str len > 0, but can be skipped if a W flag or L (DOM) flag was found
+    // Check W flags
     next_set_bit(target->w_flags, CRON_MAX_DAYS_OF_MONTH, 0, &notfound);
+    if (notfound) {
+        notfound = 0;
+        // Check L (DOM) flags as well; if they don't exist as well, DOM needs to be checked
+        next_set_bit(target->l_offset, CRON_MAX_DAYS_OF_MONTH, 0, &notfound);
+    }
     if (strlen(fields[3]) || notfound) set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
-    if (offset) cron_delBit(target->days_of_month, offset);
 
     set_months(fields[4], target->months, error); // check_and_replace_h incorporated into set_months
     if (*error) goto return_res;
