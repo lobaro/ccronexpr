@@ -580,6 +580,7 @@ void test_parse() {
     assert(check_expr_invalid("0 0 1 ? * L-7"));
     assert(check_expr_invalid("0 0 1 ? * 5L-7"));
     assert(check_expr_invalid("0 0 1 5L-7 * ?"));
+    assert(check_expr_invalid("0 0 1 5L * ?"));
     assert(check_expr_invalid("0 0 1 L12 * ?"));
     assert(check_expr_invalid("0 0 1 L12- * ?"));
     assert(check_expr_invalid("0 0 1 L1-4 * ?"));
