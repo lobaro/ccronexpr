@@ -1353,68 +1353,70 @@ static char *replace_h_entry(char *field, unsigned int pos, unsigned int min, co
 
 static char *check_and_replace_h(char *field, unsigned int pos, unsigned int min, const char **error) {
     char *has_h = strchr(field, 'H');
-    if (has_h) {
-        char *accum_field = NULL;
-        char **subfields = NULL;
-        size_t subfields_len = 0;
-        // Check if Field contains ',', if so, split into multiple subfields, and replace in each (with same position no)
-        char *has_comma = strchr(field, ',');
-        if (has_comma) {
-            // Iterate over split sub-fields, check for 'H' and replace if present
-            subfields = split_str(field, ',', &subfields_len);
-            if (subfields == NULL) {
-                *error = "Failed to split 'H' string in list";
-                goto return_error;
-            }
-            size_t res_len = 0;
-            size_t res_lens[subfields_len];
-            for (size_t i = 0; i < subfields_len; i++) {
-                has_h = strchr(subfields[i], 'H');
-                if (has_h) {
-                    subfields[i] = replace_h_entry(subfields[i], pos, min, error);
-                }
-                if (*error != NULL) {
-                    goto return_error;
-                }
-                res_lens[i] = strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT);
-                res_len += res_lens[i];
-            }
-            // Allocate space for the full string: Result lengths + (result count - 1) for the commas + 1 for '\0'
-            accum_field = (char *) cronMalloc(res_len + subfields_len);
-            if (accum_field == NULL) {
-                *error = "Failed to merge 'H' in list";
-                goto return_error;
-            }
-            memset(accum_field, 0, res_len + subfields_len);
-            char *tracking = accum_field;
-            for (size_t i = 0; i < subfields_len; i++) {
-                // Sanity check: Is "tracking" still in the allocated memory boundaries?
-                if ((tracking - accum_field) > (res_len + subfields_len)) {
-                    *error = "Failed to insert subfields to merged fields: String went oob";
-                    goto return_error;
-                }
-                strncpy(tracking, subfields[i], res_lens[i]);
-                tracking += res_lens[i];
-                // Don't append comma to last list entry
-                if (i < subfields_len - 1) {
-                    strncpy(tracking, ",",
-                            2); // using 2 to ensure the string ends in '\0', tracking will be set to that char
-                    tracking += 1;
-                }
-            }
-            free_splitted(subfields, subfields_len);
-            cronFree(field);
-            return accum_field;
-        }
-        // only one H to find and replace, then return
-        field = replace_h_entry(field, pos, min, error);
-        return field;
 
-        return_error:
-        if (subfields) free_splitted(subfields, subfields_len);
-        if (accum_field) cronFree(accum_field);
+    if (!has_h) {
         return field;
     }
+
+    char *accum_field = NULL;
+    char **subfields = NULL;
+    size_t subfields_len = 0;
+    // Check if Field contains ',', if so, split into multiple subfields, and replace in each (with same position no)
+    char *has_comma = strchr(field, ',');
+    if (has_comma) {
+        // Iterate over split sub-fields, check for 'H' and replace if present
+        subfields = split_str(field, ',', &subfields_len);
+        if (subfields == NULL) {
+            *error = "Failed to split 'H' string in list";
+            goto return_error;
+        }
+        size_t res_len = 0;
+        size_t res_lens[subfields_len];
+        for (size_t i = 0; i < subfields_len; i++) {
+            has_h = strchr(subfields[i], 'H');
+            if (has_h) {
+                subfields[i] = replace_h_entry(subfields[i], pos, min, error);
+            }
+            if (*error != NULL) {
+                goto return_error;
+            }
+            res_lens[i] = strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT);
+            res_len += res_lens[i];
+        }
+        // Allocate space for the full string: Result lengths + (result count - 1) for the commas + 1 for '\0'
+        accum_field = (char *) cronMalloc(res_len + subfields_len);
+        if (accum_field == NULL) {
+            *error = "Failed to merge 'H' in list";
+            goto return_error;
+        }
+        memset(accum_field, 0, res_len + subfields_len);
+        char *tracking = accum_field;
+        for (size_t i = 0; i < subfields_len; i++) {
+            // Sanity check: Is "tracking" still in the allocated memory boundaries?
+            if ((tracking - accum_field) > (res_len + subfields_len)) {
+                *error = "Failed to insert subfields to merged fields: String went oob";
+                goto return_error;
+            }
+            strncpy(tracking, subfields[i], res_lens[i]);
+            tracking += res_lens[i];
+            // Don't append comma to last list entry
+            if (i < subfields_len - 1) {
+                strncpy(tracking, ",",
+                        2); // using 2 to ensure the string ends in '\0', tracking will be set to that char
+                tracking += 1;
+            }
+        }
+        free_splitted(subfields, subfields_len);
+        cronFree(field);
+        return accum_field;
+    }
+    // only one H to find and replace, then return
+    field = replace_h_entry(field, pos, min, error);
+    return field;
+
+    return_error:
+    if (subfields) free_splitted(subfields, subfields_len);
+    if (accum_field) cronFree(accum_field);
     return field;
 }
 
