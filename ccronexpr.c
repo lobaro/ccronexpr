@@ -1633,62 +1633,62 @@ static char *w_check(char *field, cron_expr *target, const char **error) {
     int err;
 
     // Only available for dom, so no pos checking needed
-    if (has_w) {
-        newField = (char *) cronMalloc(sizeof(char) * strlen(field));
-        if (!newField) {
-            *error = "w_check: newField malloc error";
-            goto return_error;
-        }
-        memset(newField, 0, sizeof(char) * strlen(field));
-        char *tracking = newField;
-        // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-        if (has_char(field, '/') || has_char(field, '-')) {
-            *error = "W not allowed in iterators or ranges in 'day of month' field";
-            goto return_error;
-        }
-        // Ensure no specific days are set in day of week
-        if ((target->days_of_week[0] ^ 0x7f) != 0) {
-            *error = "Cannot set specific days of week when using 'W' in days of month.";
-            goto return_error;
-        }
-        splitField = split_str(field, ',', &len_out);
-        if (!splitField) {
-            *error = "Error splitting 'day of month' field for W detection";
-            goto return_error;
-        }
-        for (size_t i = 0; i < len_out; i++) {
-            if ((has_w = strchr(splitField[i], 'W'))) {
-                // Ensure nothing follows 'W'
-                if (*(has_w + 1) != '\0') {
-                    *error = "If W is used, 'day of month' element needs to end with it";
+    newField = (char *) cronMalloc(sizeof(char) * strlen(field));
+    if (!newField) {
+        *error = "w_check: newField malloc error";
+        goto return_error;
+    }
+    memset(newField, 0, sizeof(char) * strlen(field));
+    char *tracking = newField;
+    // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
+    if (has_char(field, '/') || has_char(field, '-')) {
+        *error = "W not allowed in iterators or ranges in 'day of month' field";
+        goto return_error;
+    }
+    // Ensure no specific days are set in day of week
+    if ((target->days_of_week[0] ^ 0x7f) != 0) {
+        *error = "Cannot set specific days of week when using 'W' in days of month.";
+        goto return_error;
+    }
+    splitField = split_str(field, ',', &len_out);
+    if (!splitField) {
+        *error = "Error splitting 'day of month' field for W detection";
+        goto return_error;
+    }
+    for (size_t i = 0; i < len_out; i++) {
+        if ((has_w = strchr(splitField[i], 'W'))) {
+            // Ensure nothing follows 'W'
+            if (*(has_w + 1) != '\0') {
+                *error = "If W is used, 'day of month' element needs to end with it";
+                goto return_error;
+            }
+            if (!(strcmp(splitField[i], "LW"))) {
+                cron_setBit(target->w_flags, 0);
+            } else {
+                *has_w = '\0';
+                w_day = parse_uint(splitField[i], &err);
+                if (err) {
+                    *error = "Error reading uint in w-check";
                     goto return_error;
                 }
-                if (!(strcmp(splitField[i], "LW"))) {
-                    cron_setBit(target->w_flags, 0);
-                } else {
-                    *has_w = '\0';
-                    w_day = parse_uint(splitField[i], &err);
-                    if (err) {
-                        *error = "Error reading uint in w-check";
-                        goto return_error;
-                    }
-                    cron_setBit(target->w_flags, w_day);
-                }
-            } else {
-                if (tracking != newField) {
-                    // A field was already added. Add a comma first
-                    strncpy(tracking, ",", 2); // ensure string ends in '\0', tracking will be set to it
-                    tracking += 1;
-                }
-                size_t field_len = strnlen(splitField[i], CRON_MAX_STR_LEN_TO_SPLIT);
-                strncpy(tracking, splitField[i], field_len);
-                tracking += field_len;
+                cron_setBit(target->w_flags, w_day);
             }
+        } else {
+            if (tracking != newField) {
+                // A field was already added. Add a comma first
+                strncpy(tracking, ",", 2); // ensure string ends in '\0', tracking will be set to it
+                tracking += 1;
+            }
+            size_t field_len = strnlen(splitField[i], CRON_MAX_STR_LEN_TO_SPLIT);
+            strncpy(tracking, splitField[i], field_len);
+            tracking += field_len;
         }
-        free_splitted(splitField, len_out);
-        cronFree(field);
-        return newField;
     }
+    free_splitted(splitField, len_out);
+    cronFree(field);
+    cron_setBit(target->months, CRON_W_DOM_BIT);
+    return newField;
+
     return_error:
     if (splitField) free_splitted(splitField, len_out);
     if (newField) cronFree(newField);
