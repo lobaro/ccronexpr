@@ -573,11 +573,11 @@ void test_parse() {
     assert(check_expr_invalid("0 0 1 HLW * ?"));
     assert(check_expr_invalid("0 0 1 HL/H * ?"));
     assert(check_expr_invalid("0 0 1 HL/HW * ?"));
-    assert(check_expr_invalid("0 0 1 ? * 5L,SUN"));
+    assert(check_expr_valid("0 0 1 ? * 5L,SUN")); // Now allowed: Every sunday, and on the last friday
     assert(check_expr_invalid("0 0 1 ? * H/L"));
     assert(check_expr_invalid("0 0 1 ? * 19L"));
     assert(check_expr_invalid("0 0 1 17 * 5L"));
-    assert(check_expr_invalid("0 0 1 ? * L-7"));
+    assert(check_expr_valid("0 0 1 ? * L-7")); // Is now allowed, will be turned into the day with an offset
     assert(check_expr_invalid("0 0 1 ? * 5L-7"));
     assert(check_expr_invalid("0 0 1 5L-7 * ?"));
     assert(check_expr_invalid("0 0 1 5L * ?"));
@@ -759,7 +759,7 @@ void test_memory() {
     cron_parse_expr("* * * * * *", &cron, &err);
     if (cronAllocations != 0) {
         printf("Allocations != 0 but %d\n", cronAllocations);
-        assert(0);
+        assert(cronAllocations == 0);
     }
     printf("Allocations: total: %d, max: %d\n", cronTotalAllocations, maxAlloc);
 }
