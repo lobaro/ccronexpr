@@ -27,7 +27,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
-#include <stdarg.h>
 
 #include "ccronexpr.h"
 
@@ -99,7 +98,7 @@ struct tm *localtime_r(const time_t *timep, struct tm *result);
 
 #endif
 
-/* Defining 'cron_mktime' to use use UTC (default) or local time */
+/* Defining 'cron_mktime' to use UTC (default) or local time */
 #ifndef CRON_USE_LOCAL_TIME
 
 /* http://stackoverflow.com/a/22557778 */
@@ -397,342 +396,263 @@ find_next(const uint8_t *bits, unsigned int max, unsigned int value, struct tm *
     return 0;
 }
 
-/**
- * Handle day of month selection if 'W' elements are present.
- * @param calendar Pointer to a struct tm, which holds the currently calculated trigger time
- * @param days_of_month Pointer to parsed day of month field from the cron expression
- * @param day_of_month Day of month from which the do_next function started. (Should be equal to calendar->tm_mday on function call and exit.)
- * @param w_flags Set W flags: See if W flag for 'L' (32nd bit) is set
- * @param reset_fields Array which specifies which fields need to be reset, if the appropriate day of month is different from the start date.
- * @param res_out Integer pointer for passing out error values
- * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
+/** Add all days with L flags to the current month bitarray,
+ * to allow finding the next fitting day as usual.
+ *
+ * The calendar will be re-set to the day and month passed in.
+ *
+ * @param calendar struct tm with current month (and day of month);
+ *                 will be used to determine the last dom, but reset to the original day.
+ * @param cron_dom (copied) bits for the cron days of month
+ * @param cron_dow bits for the cron 'L' days of week; only read for the L flag in DOW, to get which day is used.
+ * @param lw_flags bitflags for set 'L' and 'W' flags types: Checked to see if 'L' flag in DOW is present.
+ * @param l_offset bits for cron days of month 'L' flags: One bit for each offset (0-30), only read
+ * @param res_out output for possible problems finding the 'L' days. Is '0' if no error occurred
  */
-static unsigned int
-handle_w_dom(struct tm *calendar, const uint8_t *days_of_month, unsigned int day_of_month, const uint8_t *w_flags,
-             uint8_t *reset_fields, int *res_out) {
-    int err;
-    unsigned int count = 0;
-    unsigned int desired_day, loopday;
-    int notfound = 0, loopmonth;
-    const unsigned int max = 366;
+static void find_l_days(struct tm *calendar, uint8_t *cron_dom, const uint8_t *cron_dow, const uint8_t *l_offset,
+                        const uint8_t lw_flags, int *res_out) {
+    int startday = calendar->tm_mday;
+    int startmonth = calendar->tm_mon;
+    int startyear = calendar->tm_year;
 
-    unsigned int check_weekday = 0;
-
-    unsigned int startday = calendar->tm_mday;
-    unsigned int startmonth = calendar->tm_mon;
-
-    for (unsigned int loop = 0; loop < max; loop++) {
-        loopday = calendar->tm_mday;
-        loopmonth = calendar->tm_mon;
-        // First: Check for w_flags up to 2 days earlier, but at most the 1st (bit 0 (LW) is checked separately)
-        desired_day = next_set_bit(w_flags, day_of_month, (day_of_month - 2 > 0 ? day_of_month - 2 : 1), &notfound);
-        if (!notfound) {
-            // Check first which day is the "desired" day (xxW):
-            // - Is current day a Monday?
-            //   - If yes, is desired day only one day before current day?
-            // - Or is desired day the 1st?
-            //      - Is the first a Saturday? Then go to next following workday, the 3rd
-            if (calendar->tm_wday == 1) {
-                if (cron_getBit(w_flags, calendar->tm_mday - 1)) {
-                    // Great! The current day is the next trigger day and can be returned.
-                    day_of_month = calendar->tm_mday;
-                    break;
-                }
-            }
-            if (desired_day == 1) {
-                // Original day in loopday; check if 1st is not a working day
-                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                if (calendar->tm_wday == 6) {
-                    // Go 2 days forward for SAT (6); SUN is handled by the 1st case
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 2);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    day_of_month = calendar->tm_mday;
-                    break;
-                }
-            }
-        }
-        // Else:
-        // Step forward until "desired" day, either normal or "special" day
-        while (!((cron_getBit(w_flags, day_of_month)) || cron_getBit(days_of_month, day_of_month)) &&
-               count++ < max) {
-            err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-            if (err) {
-                *res_out = 1;
-                return 0;
-            }
-            // check if month rolled over
-            if (loopmonth < calendar->tm_mon) {
-                // check if LW flag is set, if yes, go back to last day of "current month"
-                if (cron_getBit(w_flags, 0)) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    day_of_month = calendar->tm_mday;
-                    check_weekday = 1;
-                    break;
-                } else {
-                    // Update loopmonth, so the missing LW flag will not be checked on every following loop
-                    loopmonth = calendar->tm_mon;
-                }
-            }
-            day_of_month = calendar->tm_mday;
-        }
-
-        if ((cron_getBit(w_flags, day_of_month) && !cron_getBit(days_of_month, day_of_month)) ||
-            check_weekday) { // weekday checking required?
-            // Is it a weekday? If so, great! It can be returned directly, and the following condition will be irrelevant.
-            // Otherwise...
-            if (calendar->tm_wday == 6 || !calendar->tm_wday) { // SAT or SUN
-                int sign = (calendar->tm_wday ? 1 : -1);
-                // If SAT: Try to go 1 day back, if accidentally in previous month, go 3 days forward (to MON)
-                // If SUN: Inverted (1 day forward, if in next month, 3 days back)
-                int oldmonth = calendar->tm_mon;
-                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1 * sign); // go to next friday
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-
-                if (oldmonth != calendar->tm_mon) {
-                    // Jumped into the previous/next month by accident...
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 3 * sign);
-                    // ...so we have to go 3 days forward/backward to get to the closest monday.
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    if (oldmonth != calendar->tm_mon) {
-                        *res_out = 1;
-                        return 0;
-                    } // just in case
-
-                }
-                day_of_month = calendar->tm_mday;
-            }
-        }
-        if ((startmonth == (unsigned int) calendar->tm_mon) && (day_of_month < startday)) {
-            // Result day is before start date?
-            // Go to day after evaluated day, try again
-            err = set_field(calendar, CRON_CF_DAY_OF_MONTH, loopday + 1);
-            if (err) {
-                *res_out = 1;
-                return 0;
-            }
-            check_weekday = 0;
-            day_of_month = calendar->tm_mday;
-        } else break;
+    int no_lflag = 0;
+    // Set calendar to last day of current month by going to "0th" of next month; get max offset from it
+    calendar->tm_mday  = 0;
+    calendar->tm_mon  += 1;
+    time_t check = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == check) {
+        // TODO: Return more detailed error code?
+        goto return_err;
     }
-    // end of loop
-    day_of_month = calendar->tm_mday;
-    if ((startday != day_of_month) || (startmonth != (unsigned int) calendar->tm_mon)) {
-        reset_all(calendar, reset_fields);
+    int lastday = calendar->tm_mday;
+    // Can either use Last DOM or Last DOW, only one of the day fields can be set to specific values.
+    // Case 1:
+    // Find first offset for L DOM flags, from 0 to 30
+    if (lw_flags & L_DOM_FLAG) {
+        unsigned int offset = next_set_bit(l_offset, CRON_MAX_DAYS_OF_MONTH, 0, &no_lflag);
+        while (no_lflag == 0) {
+            if (offset >= lastday) {
+                // Allow at least one execution this month: Set the 1st bit
+                cron_setBit(cron_dom, 1);
+            } else {
+                // Set the corresponding bit in cron_dom, removing offset from lastday
+                cron_setBit(cron_dom, lastday - offset);
+            }
+            offset = next_set_bit(l_offset, lastday, offset+1, &no_lflag);
+        }
+        goto return_success;
     }
-    return day_of_month;
+    // Case 2:
+    // Find day for L DOW flag, if set
+    if (lw_flags & L_DOW_FLAG) {
+        // Clear cur_dom, as otherwise all bits are already set
+        memset(cron_dom, 0, 4);
+        // Calendar is already set to the last day of the current month. Go back until the desired weekday is found
+        int cur_wday = calendar->tm_wday;
+        unsigned int offset = next_set_bit(cron_dow, CRON_MAX_DAYS_OF_WEEK, 0, &no_lflag);
+        if (no_lflag) {
+            // No DOW set?!
+            goto return_err;
+        }
+        unsigned int diff = 0;
+        if (offset <= cur_wday) {
+            diff = cur_wday - offset;
+        } else {
+            // cur_wday < offset; MON, but offset is FRI
+            // Add 7 days to signify cur_wday is in the week before the target day
+            diff = (cur_wday + 7) - offset;
+        }
+        // Go back diff days in month; will always stay in month as no month is only 6 days long
+        cron_setBit(cron_dom, lastday-diff);
+    }
+    // Successfully added cron bits; reset calendar and return
+    return_success:
+    calendar->tm_mday = startday;
+    calendar->tm_mon = startmonth;
+    calendar->tm_year = startyear;
+    check = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == check) {
+        goto return_err;
+    }
+    return;
+
+    return_err:
+    calendar->tm_mday = startday;
+    calendar->tm_mon = startmonth;
+    calendar->tm_year = startyear;
+    cron_mktime(calendar);
+    *res_out = 1;
 }
 
-/**
- * If 'L' is present in DOM or DOW, set the next appropriate day of month on which the cron could trigger. (Handles W for DOM as well, if the field is 'LW')
- * @param calendar Pointer to a struct tm, which holds the currently calculated trigger time
- * @param days_of_month Pointer to parsed day of month field from the cron expression
- * @param day_of_month Day of month from which the do_next function started. (Should be equal to calendar->tm_mday on function call and exit.)
- * @param day_of_week Weekday from which the do_next function started. (Should be equal to calendar->tm_wday on function call and exit.)
- * @param lw_flags Present L(W) flags: Is L(W) in DOM, or L in DOW present
- * @param reset_fields Array which specifies which fields need to be reset, if the appropriate day of month is different from the start date.
- * @param res_out Integer pointer for passing out error values
- * @return 0 if an error happened (res_out is also set to 1), next day of month as an unsigned int when successful.
+/** Add all days with W flags to the current month bitarray,
+ * to allow finding the next fitting day as usual.
+ *
+ * The calendar will be re-set to the day and month passed in.
+ *
+ * @param calendar struct tm with current month (and day of month);
+ *                 will be used to determine the last dom, but reset to the original day.
+ * @param cron_dom (copied) bits for the cron days of month, days will be set here
+ * @param w_flags bits for the 'W' flags for days of month; only read for calculations
+ * @param res_out output for possible problems finding the 'W' days. Is '0' if no error occurred
  */
+static void find_w_days(struct tm *calendar, uint8_t *cron_dom, const uint8_t *w_flags, int *res_out) {
+    int startday = calendar->tm_mday;
+    int startmonth = calendar->tm_mon;
+    int startyear = calendar->tm_year;
+
+    // Get last day of month, boundary for searched W flags, may be needed for 'LW' flag
+    calendar->tm_mday = 0;
+    calendar->tm_mon += 1;
+    time_t check = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == check) {
+        goto return_err;
+    }
+    int lastday = calendar->tm_mday;
+    // Reset to startday
+    calendar->tm_mday = startday;
+    calendar->tm_mon = startmonth;
+    calendar->tm_year = startyear;
+    check = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == check) {
+        goto return_err;
+    }
+
+    int no_wflag = 0;
+    unsigned int next_w = next_set_bit(w_flags, lastday+1, 0, &no_wflag);
+    while (no_wflag == 0) {
+        if (next_w == 0) {
+            // Last weekday of the month (can only happen on first loop)
+            calendar->tm_mday = lastday;
+            check = cron_mktime(calendar);
+            if (CRON_INVALID_INSTANT == check) {
+                goto return_err;
+            }
+            switch (calendar->tm_wday) {
+                case 0: // SUN, 2 days back
+                    calendar->tm_mday -= 2;
+                    break;
+                case 6: // SAT, 1 day back
+                    calendar->tm_mday -=1;
+                    break;
+                default: // already a valid weekday
+                    break;
+            }
+            // Set the bit in cron_dom here, and search next W flag for a day
+            cron_setBit(cron_dom, calendar->tm_mday);
+            next_w = next_set_bit(w_flags, lastday+1, 1, &no_wflag);
+            continue;
+        }
+        // Go to next W day
+        calendar->tm_mday = (int)next_w; // next_w will never be bigger than 31, is safe
+        check = cron_mktime(calendar);
+        if (CRON_INVALID_INSTANT == check) {
+            // TODO: Return more detailed error code?
+            goto return_err;
+        }
+        // Check if it is a valid weekday
+        if (calendar->tm_wday > 0 && calendar->tm_wday < 6) {
+            goto finish_loop;
+        }
+        // if not, go to the closest weekday in current month
+        // First of the month must only further in month (only +)
+        if (calendar->tm_mday == 1) {
+            if (calendar->tm_wday == 6) {
+                // Saturday: 2 days further
+                calendar->tm_mday += 2;
+            } else {
+                // Sunday: 1 day further
+                calendar->tm_mday++;
+            }
+            goto finish_loop;
+        }
+        // Other days: Go one day back (SAT), or one day further (SUN), and check that month hasn't rolled over (then back to FRI)
+        if (calendar->tm_wday == 6) {
+            calendar->tm_mday--;
+            goto finish_loop;
+        }
+        calendar->tm_mday++;
+        check = cron_mktime(calendar);
+        if (CRON_INVALID_INSTANT == check) {
+            // TODO: Return more detailed error code?
+            goto return_err;
+        }
+        if (calendar->tm_mon != startmonth) {
+            // go 3 days back
+            calendar->tm_mday -= 3;
+            check = cron_mktime(calendar);
+            if (CRON_INVALID_INSTANT == check) {
+                // TODO: Return more detailed error code?
+                goto return_err;
+            }
+        }
+
+        finish_loop:
+        cron_setBit(cron_dom, calendar->tm_mday);
+        // Find next flag
+        next_w = next_set_bit(w_flags, lastday+1, next_w+1, &no_wflag);
+    }
+    calendar->tm_mday = startday;
+    calendar->tm_mon = startmonth;
+    calendar->tm_year = startyear;
+    check = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == check) {
+        goto return_err;
+    }
+    return;
+
+    return_err:
+    calendar->tm_mday = startday;
+    calendar->tm_mon = startmonth;
+    calendar->tm_year = startyear;
+    cron_mktime(calendar);
+    *res_out = 1;
+}
+
 static unsigned int
-handle_l_flag(struct tm *calendar, const uint8_t *days_of_month, unsigned int day_of_month, const uint8_t *days_of_week,
-              uint8_t lw_flags, uint8_t *reset_fields, int *res_out) {
+find_next_day(struct tm *calendar, const uint8_t *cron_dom, unsigned int day_of_month, const uint8_t *cron_dow,
+              unsigned int day_of_week, const uint8_t lw_flags, const uint8_t *l_dom_offset, const uint8_t *l_dow_flags,
+              const uint8_t *w_flags, uint8_t *reset_fields, int *res_out) {
     int err;
     unsigned int count = 0;
-    const unsigned int max = 366;
-
-    unsigned int startday = calendar->tm_mday;
-    unsigned int startmonth = calendar->tm_mon;
-
-    switch (lw_flags) {
-        case L_DOW_FLAG: {
-            // L with day in DOW
-            unsigned int searched_weekday = next_set_bit(days_of_week, 8, 0, res_out);
-            if (*res_out == 1) return 0;
-            // Special case: If already past the last weekday of the month, roll over into the next month
-            // This is why finding the last weekday is in a loop which is broken only when the assumed trigger day is not behind the start one
-            while (count++ < max) {
-                // Goto first day of following month
-                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                // Then, go back to the end of starting month
-                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
-
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                day_of_month = calendar->tm_mday;
-
-                // Finally, go back until weekday matches searched weekday
-                while (searched_weekday != (unsigned int) calendar->tm_wday) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    day_of_month = calendar->tm_mday;
-                }
-
-                // Verify assumed trigger day is not behind startday
-                if ((startmonth == (unsigned int) calendar->tm_mon) && (startday > day_of_month)) {
-                    // Startmonth hasn't changed, but trigger day is before initial day
-                    reset_all(calendar, reset_fields);
-                    while (calendar->tm_mon - startmonth == 0) {
-                        // Roll over into next month
-                        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-                        if (err) {
-                            *res_out = 1;
-                            return 0;
-                        }
-                    }
-                } else break;
-            }
+    int max_days = 366; // without flags, advance 1 year may. days until months end with lw_flags; then the L- and W-Flags need to be recalculated
+    // Copy cron_dom to add days determined by L- and W- flags
+    uint8_t cur_doms[4];
+    memcpy(cur_doms, cron_dom, 4);
+    if (lw_flags) {
+        // Copy calendar to move day independently searching for L/W-Days; timezone MUST not be touched
+        // find_{L,W}_days() will not alter the tm struct
+        struct tm searcher;
+        memcpy(&searcher, calendar, sizeof searcher);
+        // Add L days and W days of current month to cur_doms
+        find_l_days(&searcher, cur_doms, l_dow_flags, l_dom_offset, lw_flags, res_out);
+        if (*res_out) {
+            // something went wrong; return 0
+            return 0;
         }
-            break;
-        case L_DOM_FLAG: {
-            int currentmonth = startmonth;
-            unsigned int offset;
-            uint8_t offset_mask[4];
-
-            for (int i = 0; i < 4; i++) {
-                memset(&(offset_mask[i]), ~(*(days_of_month + i)), 1);
-            }
-
-            for (unsigned int loop = 0; loop < max; loop++) {
-                // Goto first day of following month
-                err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                // Then, go back to the end of starting month
-                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
-
-                if (err) {
-                    *res_out = 1;
-                    return 0;
-                }
-                day_of_month = calendar->tm_mday;
-
-                // If offset is set, go back offset days from end of month
-                if ((offset = next_set_bit(offset_mask, CRON_MAX_DAYS_OF_MONTH, 1, &err))) {
-                    err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -(int) offset);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    if (currentmonth != calendar->tm_mon) {
-                        // Ended up in previous month? Go to first of current month
-                        err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                        if (err) {
-                            *res_out = 1;
-                            return 0;
-                        }
-                        err = set_field(calendar, CRON_CF_MONTH, calendar->tm_mon + 1);
-                        if (err) {
-                            *res_out = 1;
-                            return 0;
-                        }
-                        day_of_month = calendar->tm_mday;
-                        currentmonth = calendar->tm_mon;
-                    }
-                }
-                // Check current trigger date is after startdate, otherwise roll over into next month and start again
-                if ((unsigned int) calendar->tm_mon == startmonth && (unsigned int) calendar->tm_mday < startday) {
-                    // Goto first day of following month
-                    err = set_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-                    err = add_to_field(calendar, CRON_CF_MONTH, 1);
-                    if (err) {
-                        *res_out = 1;
-                        return 0;
-                    }
-
-                    day_of_month = calendar->tm_mday;
-                    currentmonth = calendar->tm_mon;
-                    continue;
-                }
-                day_of_month = calendar->tm_mday;
-                break;
-            }
+        find_w_days(&searcher, cur_doms, w_flags, res_out);
+        if (*res_out) {
+            // something went wrong; return 0
+            return 0;
         }
-            break;
-        default: {
-            // if different bits are set this shouldn't deal with it
+        // Get last day of current month: 0th day of next month
+        searcher.tm_mday = 0;
+        searcher.tm_mon += 1;
+        time_t check = cron_mktime(&searcher);
+        if (CRON_INVALID_INSTANT == check) {
             *res_out = 1;
             return 0;
         }
-            break;
+        max_days = (searcher.tm_mday - calendar->tm_mday) + 1; // 1 day more, to allow rolling over into next month
     }
-    // Finally, check if the planned date has moved in comparison to the start. If so, reset appropriate calendar fields for recalculation
-    if ((startday != day_of_month) || (startmonth != (unsigned int) calendar->tm_mon)) {
+    // Find next fitting day in month, or reset lower fields and roll over into next month
+    while ( (!cron_getBit(cur_doms, day_of_month) || !cron_getBit(cron_dow, day_of_week)) &&
+           count++ < max_days) {
+        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
+
+        if (err) goto return_error;
+        day_of_month = calendar->tm_mday;
+        day_of_week = calendar->tm_wday;
         reset_all(calendar, reset_fields);
-    }
-    return day_of_month;
-}
-
-static unsigned int
-find_next_day(struct tm *calendar, const uint8_t *days_of_month, unsigned int day_of_month, const uint8_t *days_of_week,
-              unsigned int day_of_week, uint8_t l_flags, const uint8_t *w_flags, uint8_t *reset_fields, int *res_out) {
-    int err;
-    unsigned int count = 0;
-    int notfound = 0;
-    const unsigned int max = 366;
-    if (l_flags) {
-        day_of_month = handle_l_flag(calendar, days_of_month, day_of_month, days_of_week, l_flags, reset_fields,
-                                     res_out);
-        if (*res_out) goto return_error;
-    } else {
-        next_set_bit(w_flags, CRON_MAX_DAYS_OF_MONTH, 0, &notfound); // check for W day presence
-        if (notfound) {
-            while ((!cron_getBit(days_of_month, day_of_month) || !cron_getBit(days_of_week, day_of_week)) &&
-                   count++ < max) {
-                err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, 1);
-
-                if (err) goto return_error;
-                day_of_month = calendar->tm_mday;
-                day_of_week = calendar->tm_wday;
-                reset_all(calendar, reset_fields);
-            }
-        } else {
-            day_of_month = handle_w_dom(calendar, days_of_month, day_of_month, w_flags, reset_fields, res_out);
-            if (*res_out) goto return_error;
-        }
     }
     return day_of_month;
 
@@ -747,7 +667,8 @@ find_next_day(struct tm *calendar, const uint8_t *days_of_month, unsigned int da
  *
  * Principle from [cron_next](#cron_next):
  * 1. Try to find matching seconds after start, if not found (in find_next()), raise minutes by one, reset seconds to 0 and start again.
- * 2. Once matching seconds are found,
+ * 2. Once matching seconds are found, check if minute is valid for CRON. If so, continue to find matching hours, if not, raise hours by one, reset minutes (and lower fields) to 0, and re-start.
+ * (Same for hours, day and month until a time fitting a CRON was found, or the next execution date is further than 4 years away.
  *
  * @param expr The parsed cron expression.
  * @param calendar The time after which the next cron trigger should be found. If successful (see return), will be replaced with the next trigger time.
@@ -769,11 +690,20 @@ static int do_next(const cron_expr *expr, struct tm *calendar, unsigned int dot)
     unsigned int update_day_of_month = 0;
     unsigned int month = 0;
     unsigned int update_month = 0;
-    // L flags for DOM and DOW, or LW for DOM
+    // L flags for DOM and DOW, or W flag for DOM
     uint8_t l_flags = 0; // Bit 0: W (day of month), Bit 1: L (day of month), Bit 2: L (day of week)
+    if (cron_getBit(expr->months, CRON_L_DOM_BIT)) {
+        l_flags |= L_DOM_FLAG;
+    }
+    if (cron_getBit(expr->months, CRON_L_DOW_BIT)) {
+        l_flags |= L_DOW_FLAG;
+    }
+    if (cron_getBit(expr->months, CRON_W_DOM_BIT)) {
+        l_flags |= W_DOM_FLAG;
+    }
 
     while (reset_fields) {
-        if (calendar->tm_year - dot > 4) {
+        if (calendar->tm_year - dot > 5) {
             res = -1;
             goto return_result;
         }
@@ -810,15 +740,9 @@ static int do_next(const cron_expr *expr, struct tm *calendar, unsigned int dot)
         day_of_month = calendar->tm_mday;
         month = calendar->tm_mon;
 
-        if (cron_getBit(expr->months, CRON_L_DOM_BIT)) {
-            l_flags |= L_DOM_FLAG;
-        }
-        if (cron_getBit(expr->months, CRON_L_DOW_BIT)) {
-            l_flags |= L_DOW_FLAG;
-        }
-
         update_day_of_month = find_next_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week,
-                                            day_of_week, l_flags, expr->w_flags, &reset_fields, &res);
+                                            day_of_week, l_flags, expr->l_dom_offset, expr->l_dow_flags, expr->w_flags,
+                                            &reset_fields,&res);
         if (0 != res) goto return_result;
         if (day_of_month == update_day_of_month && month == (unsigned int) calendar->tm_mon) {
             push_to_fields_arr(&reset_fields, CRON_CF_DAY_OF_MONTH);
@@ -1463,83 +1387,188 @@ static void set_days_of_month(char *field, uint8_t *targ, const char **error) {
 
 }
 
-static void l_check(char *field, unsigned int pos, unsigned int *offset, cron_expr *target, const char **error) {
+static char *replace_l_entry(char *field, unsigned int pos, cron_expr *target, const char **error) {
     char *has_l = strchr(field, 'L');
-    int err;
-
-    if (has_l) {
-        switch (pos) {
-            case CRON_FIELD_DAY_OF_MONTH: {
-                // Ensure nothing is in field before L
-                if (has_l != field) {
-                    *error = "L only allowed as first and only option (with an offset or W) in 'day of month' field";
-                    return;
-                }
-                // Ensure no specific days are set in day of week
-                if ((target->days_of_week[0] ^ 0x7f) != 0) {
-                    *error = "Cannot set specific days of week if using 'L' in days of month.";
-                    return;
-                }
-                // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-                // Also, char following 'L' has to be either '-', 'W' or '\0'
-                if ((has_char(field, ',') || has_char(field, '/')) || \
-              !((*(field + 1) == '-') || (*(field + 1) == 'W') || (*(field + 1) == '\0'))) {
-                    *error = "L only allowed in combination before an offset or before W in 'day of month' field";
-                    return;
-                }
-                cron_setBit(target->months, CRON_L_DOM_BIT);
-                if (has_char(field, '-')) {
-                    if (*(has_l + 1) == '-' && has_l == field) {
-                        // offset is specified, L is starting dom
-                        if (offset) {
-                            *offset = parse_uint(has_l + 2, &err);
-                        } else {
-                            *error = "Offset found in 'day of month', but no valid pointer given";
-                            return;
-                        }
-                        if (err) {
-                            *error = "Error parsing L offset in 'day of month'";
-                            return;
-                        }
-                        if (*offset == 0) {
-                            *error = "Invalid offset: Needs to be > 0";
-                            return;
-                        } else if (*offset > 30) {
-                            // used to break, now it will simply set offset to 30
-                            *offset = 30;
-                        }
-                        // Because dom field will be '*', the offset will be set after set_days_of_month
-                    }
-                }
-                *has_l = '\0';
-                // avoid an empty dom field when string is starting with 'L'
-                if (strlen(field) == 0) {
-                    strcpy(field, "*");
-                }
-            }
-                break;
-            case CRON_FIELD_DAY_OF_WEEK: {
-                if (has_char(field, ',') || has_char(field, '/') || has_char(field, '-')) {
-                    *error = "L only allowed in combination with one day in 'day of week' field";
-                    return;
-                }
-                if ((has_l == field) && (strlen(field) == 1)) {
-                    *has_l = '0'; // Only L, so replace with sunday
-                } else {
-                    cron_setBit(target->months, CRON_L_DOW_BIT);
-                    *has_l = '\0';
-                }
-            }
-                break;
-            default:
-                *error = "Trying to find 'L' in unsupported field";
-                break;
-        }
+    if (!has_l) {
+        return field;
     }
+    int err;
+    unsigned int offset;
+    char day_char[2];
+
+    switch (pos) {
+        case CRON_FIELD_DAY_OF_MONTH: {
+            // Possible usage: With offset, L-x days before last day of month
+            // Days of Week and Days of Month cannot be set to specific values in the same cron anymore.
+            // (Sub-)Field needs to start with L!
+            if (has_l != field) {
+                *error = "Element in Day of Month with 'L' doesn't begin with it";
+                return field;
+            }
+
+            // Ensure W day is not the last in a range or iterator of days
+            // Also, char following 'L' has to be either '-', 'W', ',' or '\0'; ',' shouldn't be possible as replace_l_entry is only fed split fields
+            if ( has_char(has_l, '/') || \
+                !((*(has_l + 1) == '-') || (*(has_l + 1) == 'W') || (*(has_l + 1) == ',') || (*(has_l + 1) == '\0'))) {
+                *error = "L only allowed in combination before an offset or before W in 'day of month' field";
+                return field;
+            }
+
+            cron_setBit(target->months, CRON_L_DOM_BIT);
+            if (*(has_l + 1) == '-') {
+                // offset is specified, L is starting dom
+                offset = parse_uint(has_l + 2, &err);
+                if (err) {
+                    *error = "Error parsing L offset in 'day of month'";
+                    return field;
+                }
+                if (offset == 0) {
+                    *error = "Invalid offset: Needs to be > 0";
+                    return field;
+                } else if (offset > 30) {
+                    // used to break, now it will simply set offset to 30
+                    offset = 30;
+                }
+                cron_setBit(target->l_dom_offset, offset);
+            } else {
+                // No offset, set first bit in l_dom_offset
+                cron_setBit(target->l_dom_offset, 0);
+            }
+            *has_l = '\0';
+            // Should result in a 0-length string, which is ok. The offset is stored separately
+            return field;
+        }
+        case CRON_FIELD_DAY_OF_WEEK: {
+            if ( has_char(field, '/') ) {
+                *error = "L can't be used with iterators in 'day of week' field";
+                // Commas shouldn't be present, as sub-fields are input here, '-' for ranges is ok
+                return field;
+            }
+            // 'L' with offset (or none)
+            if (has_l == field) {
+                if (strlen(field) == 1) {
+                    *has_l = '0'; // Only L, so replace with sunday
+                    return field;
+                }
+                if (*(has_l+1) == '-') {
+                    // Convert offset to proper day
+                    offset = parse_uint(has_l+2, &err);
+                    if (err) {
+                        *error = "Error parsing L offset in 'day of month'";
+                        return field;
+                    }
+                    if (offset == 0) {
+                        *error = "Invalid offset: Needs to be > 0";
+                        return field;
+                    } else if (offset > 6) {
+                        // used to break, now it will simply set offset to 6
+                        offset = 6;
+                    }
+                    // print offset instead of l; sprintf will append '\0' automatically
+                    sprintf(has_l, "%1u", 7-offset);
+                }
+            } else {
+                // Weekday L flag: Last x-day of month
+                // Check if char after needs to end (sub-)field
+                if (*(has_l+1) != '\0') {
+                    *error = "'L' in weekday doesn't end field";
+                    return field;
+                }
+                // check if char before 'L' is a decimal for a weekday
+                if (strnlen(field, CRON_MAX_STR_LEN_TO_SPLIT) > 2) {
+                    *error = "'L' in weekday is prefixed by non-weekday characters";
+                    return field;
+                }
+                if (!sscanf(field, "%[01234567]L", &day_char[0])) {
+                    *error = "'L' in weekday is preceded by non-weekday characters";
+                    return field;
+                }
+                cron_setBit(target->months, CRON_L_DOW_BIT);
+                day_char[1] = '\0';
+                offset = parse_uint(day_char, &err);
+                if (err) {
+                    *error = "Error parsing 'L' Weekday in DOW";
+                    return field;
+                }
+                if (offset == 7) {
+                    // SUN is 0 bit, but can be '7' in field
+                    offset = 0;
+                }
+                cron_setBit(target->l_dow_flags, offset);
+                memset(field, 0, sizeof(char)*(has_l-field+1)); // Day is marked in l_dow_flags, so an empty string can be returned
+            }
+            return field;
+        }
+        default:
+            *error = "Trying to find 'L' in unsupported field";
+            return field;
+    }
+}
+
+static char *l_check(char *field, unsigned int pos, cron_expr *target, const char **error) {
+    char *has_l = strchr(field, 'L');
+
+    if (!has_l) {
+        return field;
+    }
+
+    char *has_comma = strchr(field, ',');
+    char *new_field = field;
+    char **subfields = NULL;
+    size_t subfields_len = 0;
+    if (has_comma) {
+        // split list into subfields
+        subfields = split_str(field, ',', &subfields_len);
+        if (!subfields) {
+            *error = "Failed to split 'L' in list";
+            goto return_res;
+        }
+        size_t orig_len = strnlen(field, CRON_MAX_STR_LEN_TO_SPLIT);
+        // allocate new field, with same length as current field; should be supported, as at least one letter is dropped
+        new_field = (char *) cronMalloc(sizeof(char) * orig_len);
+        if (new_field == NULL) {
+            *error = "Failed to allocate string for 'L' replacement";
+            goto return_res;
+        }
+        memset(new_field, 0, orig_len);
+        char *tracking = new_field;
+        // replace_l_entry for each, return field with replacements
+        for (size_t i = 0; i < subfields_len; i++) {
+            if ((tracking - new_field) > orig_len) {
+                *error = "Failed to merge strings during 'L' replacement: String went oob";
+                goto return_res;
+            }
+            subfields[i] = replace_l_entry(subfields[i], pos, target, error);
+            if (*error != NULL) {
+                goto return_res;
+            }
+            if (strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT) > 0) {
+                // No comma for first field separation, or an empty field
+                if (i > 0) {
+                    strncpy(tracking, ",", 1);
+                    tracking += 1;
+                }
+                strncpy(tracking, subfields[i], strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT));
+                tracking += strnlen(subfields[i], CRON_MAX_STR_LEN_TO_SPLIT);
+            }
+        }
+        goto return_res;
+    }
+    // Replace the L in the current field
+    new_field = replace_l_entry(field, pos, target, error);
+    return_res:
+    if (subfields) free_splitted(subfields, subfields_len);
+    if (new_field != field) cronFree(field); // field was replaced successfully
+    return new_field;
 }
 
 static char *w_check(char *field, cron_expr *target, const char **error) {
     char *has_w = strchr(field, 'W');
+
+    if (!has_w) {
+        return field;
+    }
+
     char *newField = NULL;
     char **splitField = NULL;
     size_t len_out = 0;
@@ -1548,62 +1577,62 @@ static char *w_check(char *field, cron_expr *target, const char **error) {
     int err;
 
     // Only available for dom, so no pos checking needed
-    if (has_w) {
-        newField = (char *) cronMalloc(sizeof(char) * strlen(field));
-        if (!newField) {
-            *error = "w_check: newField malloc error";
-            goto return_error;
-        }
-        memset(newField, 0, sizeof(char) * strlen(field));
-        char *tracking = newField;
-        // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-        if (has_char(field, '/') || has_char(field, '-')) {
-            *error = "W not allowed in iterators or ranges in 'day of month' field";
-            goto return_error;
-        }
-        // Ensure no specific days are set in day of week
-        if ((target->days_of_week[0] ^ 0x7f) != 0) {
-            *error = "Cannot set specific days of week when using 'W' in days of month.";
-            goto return_error;
-        }
-        splitField = split_str(field, ',', &len_out);
-        if (!splitField) {
-            *error = "Error splitting 'day of month' field for W detection";
-            goto return_error;
-        }
-        for (size_t i = 0; i < len_out; i++) {
-            if ((has_w = strchr(splitField[i], 'W'))) {
-                // Ensure nothing follows 'W'
-                if (*(has_w + 1) != '\0') {
-                    *error = "If W is used, 'day of month' element needs to end with it";
+    newField = (char *) cronMalloc(sizeof(char) * strlen(field));
+    if (!newField) {
+        *error = "w_check: newField malloc error";
+        goto return_error;
+    }
+    memset(newField, 0, sizeof(char) * strlen(field));
+    char *tracking = newField;
+    // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
+    if (has_char(field, '/') || has_char(field, '-')) {
+        *error = "W not allowed in iterators or ranges in 'day of month' field";
+        goto return_error;
+    }
+    // Ensure no specific days are set in day of week
+    if ((target->days_of_week[0] ^ 0x7f) != 0) {
+        *error = "Cannot set specific days of week when using 'W' in days of month.";
+        goto return_error;
+    }
+    splitField = split_str(field, ',', &len_out);
+    if (!splitField) {
+        *error = "Error splitting 'day of month' field for W detection";
+        goto return_error;
+    }
+    for (size_t i = 0; i < len_out; i++) {
+        if ((has_w = strchr(splitField[i], 'W'))) {
+            // Ensure nothing follows 'W'
+            if (*(has_w + 1) != '\0') {
+                *error = "If W is used, 'day of month' element needs to end with it";
+                goto return_error;
+            }
+            if (!(strcmp(splitField[i], "LW"))) {
+                cron_setBit(target->w_flags, 0);
+            } else {
+                *has_w = '\0';
+                w_day = parse_uint(splitField[i], &err);
+                if (err) {
+                    *error = "Error reading uint in w-check";
                     goto return_error;
                 }
-                if (!(strcmp(splitField[i], "LW"))) {
-                    cron_setBit(target->w_flags, 0);
-                } else {
-                    *has_w = '\0';
-                    w_day = parse_uint(splitField[i], &err);
-                    if (err) {
-                        *error = "Error reading uint in w-check";
-                        goto return_error;
-                    }
-                    cron_setBit(target->w_flags, w_day);
-                }
-            } else {
-                if (tracking != newField) {
-                    // A field was already added. Add a comma first
-                    strncpy(tracking, ",", 2); // ensure string ends in '\0', tracking will be set to it
-                    tracking += 1;
-                }
-                size_t field_len = strnlen(splitField[i], CRON_MAX_STR_LEN_TO_SPLIT);
-                strncpy(tracking, splitField[i], field_len);
-                tracking += field_len;
+                cron_setBit(target->w_flags, w_day);
             }
+        } else {
+            if (tracking != newField) {
+                // A field was already added. Add a comma first
+                strncpy(tracking, ",", 2); // ensure string ends in '\0', tracking will be set to it
+                tracking += 1;
+            }
+            size_t field_len = strnlen(splitField[i], CRON_MAX_STR_LEN_TO_SPLIT);
+            strncpy(tracking, splitField[i], field_len);
+            tracking += field_len;
         }
-        free_splitted(splitField, len_out);
-        cronFree(field);
-        return newField;
     }
+    free_splitted(splitField, len_out);
+    cronFree(field);
+    cron_setBit(target->months, CRON_W_DOM_BIT);
+    return newField;
+
     return_error:
     if (splitField) free_splitted(splitField, len_out);
     if (newField) cronFree(newField);
@@ -1615,7 +1644,6 @@ void cron_parse_expr(const char *expression, cron_expr *target, const char **err
     size_t len = 0;
     char **fields = NULL;
     char *days_replaced = NULL;
-    unsigned int offset = 0;
     int notfound = 0;
     if (!error) {
         error = &err_local;
@@ -1667,7 +1695,14 @@ void cron_parse_expr(const char *expression, cron_expr *target, const char **err
         cronFree(days_replaced);
         goto return_res;
     }
-    l_check(days_replaced, 5, NULL, target, error);
+    days_replaced = l_check(days_replaced, 5, target, error);
+    if (*error) {
+        cronFree(days_replaced);
+        goto return_res;
+    }
+    if (strnlen(days_replaced, CRON_MAX_STR_LEN_TO_SPLIT) == 0) {
+        days_replaced[0] = '*'; // Ensure all weekdays are available if the field is empty (L flags)
+    }
     set_days(days_replaced, target->days_of_week, CRON_MAX_DAYS_OF_WEEK, error);
     cronFree(days_replaced);
     if (*error) goto return_res;
@@ -1690,14 +1725,19 @@ void cron_parse_expr(const char *expression, cron_expr *target, const char **err
     fields[3] = w_check(fields[3], target, error);
     if (*error) goto return_res;
     // Days of month: Test for L, if there, set 15th bit in months
-    l_check(fields[3], 3, &offset, target, error);
+    fields[3] = l_check(fields[3], 3, target, error);
     if (*error) goto return_res;
-    // If w flags are set, days of month can be empty (e.g. "LW" or "9W")
-    // So parsing has to happen if the field str len > 0, but can be skipped if a W flag was found
+    // If w flags are set, days of month can be empty (e.g. "LW" or "9W" or "L")
+    // So parsing has to happen if the field str len > 0, but can be skipped if a W flag or L (DOM) flag was found
+    // Check W flags
     next_set_bit(target->w_flags, CRON_MAX_DAYS_OF_MONTH, 0, &notfound);
+    if (notfound) {
+        notfound = 0;
+        // Check L (DOM) flags as well; if they don't exist as well, DOM needs to be checked
+        next_set_bit(target->l_dom_offset, CRON_MAX_DAYS_OF_MONTH, 0, &notfound);
+    }
     if (strlen(fields[3]) || notfound) set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
-    if (offset) cron_delBit(target->days_of_month, offset);
 
     set_months(fields[4], target->months, error); // check_and_replace_h incorporated into set_months
     if (*error) goto return_res;

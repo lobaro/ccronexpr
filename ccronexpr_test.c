@@ -442,6 +442,18 @@ void test_expr() {
     assert(check_next("0 0 1 L-31 * ?",         "2022-05-12_00:00:00", "2022-06-01_01:00:00"));
     assert(check_next("0 0 1 L-32 * ?",         "2022-05-12_00:00:00", "2022-06-01_01:00:00"));
     assert(check_next("0 0 1 L-31 2 ?",         "2022-01-01_00:00:00", "2022-02-01_01:00:00"));
+    assert(check_next("0 0 1 1,L 2 ?",          "2022-01-01_00:00:00", "2022-02-01_01:00:00"));
+    assert(check_next("0 0 1 1,L 2 ?",          "2022-02-02_00:00:00", "2022-02-28_01:00:00"));
+    assert(check_next("0 0 1 1,L * ?",          "2022-02-28_02:00:00", "2022-03-01_01:00:00"));
+    assert(check_next("0 0 1 1,L * ?",          "2022-03-02_00:00:00", "2022-03-31_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 2 ?",    "2022-01-01_00:00:00", "2022-02-01_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 2 ?",    "2022-02-02_00:00:00", "2022-02-05_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 2 ?",    "2022-02-06_00:00:00", "2022-02-23_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 2 ?",    "2022-02-24_00:00:00", "2022-02-28_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 * ?",    "2022-02-28_02:00:00", "2022-03-01_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 * ?",    "2022-03-02_00:00:00", "2022-03-05_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 * ?",    "2022-03-06_00:00:00", "2022-03-26_01:00:00"));
+    assert(check_next("0 0 1 1,L,5,L-5 * ?",    "2022-03-27_00:00:00", "2022-03-31_01:00:00"));
     // Tests for unintended month rollovers when going from 31st, see https://github.com/staticlibs/ccronexpr/issues/35
     assert(check_next("0 0 0 ? 11-12 *",        "2022-05-31_00:00:00", "2022-11-01_00:00:00"));
     assert(check_next("0 0 0 ? 11-12 *",        "2022-07-31_00:00:00", "2022-11-01_00:00:00"));
@@ -460,6 +472,8 @@ void test_expr() {
     assert(check_next("0 0 0 24W,25W * *",      "2022-09-22_01:02:03", "2022-09-23_00:00:00"));
     assert(check_next("0 0 0 24W,25W * *",      "2022-09-24_01:02:03", "2022-09-26_00:00:00"));
     assert(check_next("0 0 0 29W,30W * *",      "2022-10-24_01:02:03", "2022-10-28_00:00:00"));
+    assert(check_next("0 0 0 29W,30W * *",      "2022-02-24_01:02:03", "2022-03-29_00:00:00"));
+    assert(check_next("0 0 0 15,29W,30W * *",   "2022-02-24_01:02:03", "2022-03-15_00:00:00"));
     assert(check_next("0 0 0 29W,30W * *",      "2022-10-28_01:02:03", "2022-10-31_00:00:00"));
     assert(check_next("0 0 0 29W,30W * *",      "2022-10-29_01:02:03", "2022-10-31_00:00:00"));
     assert(check_next("0 0 0 29W,30W * *",      "2023-04-27_01:02:03", "2023-04-28_00:00:00"));
@@ -467,6 +481,7 @@ void test_expr() {
     assert(check_next("0 0 0 1W,2W * *",        "2023-04-01_01:02:03", "2023-04-03_00:00:00"));
     assert(check_next("0 0 0 1W,2W * *",        "2023-04-02_01:02:03", "2023-04-03_00:00:00"));
     assert(check_next("0 0 0 1W,2W * *",        "2023-04-03_01:02:03", "2023-05-01_00:00:00"));
+    assert(check_next("0 0 0 1W,15W,30W * *",   "2023-02-24_01:02:03", "2023-03-01_00:00:00"));
     assert(check_next("0 0 0 1W,15W,30W * *",   "2023-04-01_01:02:03", "2023-04-03_00:00:00"));
     assert(check_next("0 0 0 1W,15W,30W * *",   "2023-04-03_01:02:03", "2023-04-14_00:00:00"));
     assert(check_next("0 0 0 1W,15,30W * *",    "2023-04-03_01:02:03", "2023-04-15_00:00:00"));
@@ -479,6 +494,8 @@ void test_expr() {
     assert(check_next("0 0 0 1W,8W,15W,30W * *","2023-04-07_01:02:03", "2023-04-14_00:00:00"));
     assert(check_next("0 0 0 1W,8W,15W,30W * *","2023-04-14_01:02:03", "2023-04-28_00:00:00"));
     assert(check_next("0 0 0 1W,8W,15W,30W * *","2023-04-28_01:02:03", "2023-05-01_00:00:00"));
+    assert(check_next("0 0 0 1W,15W,LW * *",    "2023-02-16_01:02:03", "2023-02-28_00:00:00"));
+    assert(check_next("0 0 0 1W,15W,LW * *",    "2016-02-16_01:02:03", "2016-02-29_00:00:00"));
     assert(check_next("0 0 0 1W,15W,LW * *",    "2023-04-01_01:02:03", "2023-04-03_00:00:00"));
     assert(check_next("0 0 0 1W,15W,LW * *",    "2023-04-03_01:02:03", "2023-04-14_00:00:00"));
     assert(check_next("0 0 0 1W,15W,LW * *",    "2023-04-14_01:02:03", "2023-04-28_00:00:00"));
@@ -506,9 +523,9 @@ void test_parse() {
     // Cannot set specific days of month AND days of week
     assert(check_same("* * * * * *",
                       "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19-59,H 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18-59,H 0,1,2,3,4,5,6,7,8,9,10,11-23,H * jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec,H mon,tue,wed,thu,fri,sat,sun,H"));
-    //assert(check_same("0 0 15 1,16,L * *", "0 0 15 1,L,16 * *"));
-    //assert(check_expr_valid("0 0 15 1,16,L * *"));
-    //assert(check_expr_valid("0 0 15 1,L,16 * *"));
+    assert(check_same("0 0 15 1,16,L * *", "0 0 15 1,L,16 * *"));
+    assert(check_expr_valid("0 0 15 1,16,L * *"));
+    assert(check_expr_valid("0 0 15 1,L,16 * *"));
     // check default hash func has valid output
     cron_init_custom_hash_fn(NULL);
     assert(check_expr_valid("0 0 1 * * ?"));
@@ -561,13 +578,14 @@ void test_parse() {
     assert(check_expr_invalid("0 0 1 HLW * ?"));
     assert(check_expr_invalid("0 0 1 HL/H * ?"));
     assert(check_expr_invalid("0 0 1 HL/HW * ?"));
-    assert(check_expr_invalid("0 0 1 ? * 5L,SUN"));
+    assert(check_expr_valid("0 0 1 ? * 5L,SUN")); // Now allowed: Every sunday, and on the last friday
     assert(check_expr_invalid("0 0 1 ? * H/L"));
     assert(check_expr_invalid("0 0 1 ? * 19L"));
     assert(check_expr_invalid("0 0 1 17 * 5L"));
-    assert(check_expr_invalid("0 0 1 ? * L-7"));
+    assert(check_expr_valid("0 0 1 ? * L-7")); // Is now allowed, will be turned into the day with an offset
     assert(check_expr_invalid("0 0 1 ? * 5L-7"));
     assert(check_expr_invalid("0 0 1 5L-7 * ?"));
+    assert(check_expr_invalid("0 0 1 5L * ?"));
     assert(check_expr_invalid("0 0 1 L12 * ?"));
     assert(check_expr_invalid("0 0 1 L12- * ?"));
     assert(check_expr_invalid("0 0 1 L1-4 * ?"));
@@ -746,7 +764,7 @@ void test_memory() {
     cron_parse_expr("* * * * * *", &cron, &err);
     if (cronAllocations != 0) {
         printf("Allocations != 0 but %d\n", cronAllocations);
-        assert(0);
+        assert(cronAllocations == 0);
     }
     printf("Allocations: total: %d, max: %d\n", cronTotalAllocations, maxAlloc);
 }
