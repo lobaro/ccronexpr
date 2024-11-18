@@ -409,7 +409,8 @@ void test_expr() {
     assert(check_next("0 0 1 8W,26W * ?",       "2022-02-26_00:00:00", "2022-03-08_01:00:00"));
     assert(check_next("0 0 1 8W,26W * ?",       "2022-03-09_00:00:00", "2022-03-25_01:00:00"));
     assert(check_next("0 0 1 29W * ?",          "2022-02-28_00:00:00", "2022-03-29_01:00:00"));
-    assert(check_next("0 0 1 29W * ?",          "2024-02-28_00:00:00", "2024-02-29_01:00:00"));
+    assert(check_next("0 0 1 29W * ?",          "2022-02-28_00:00:00", "2022-03-29_01:00:00"));
+    assert(check_next("0 0 1 1-3,29W * ?",      "2024-02-28_00:00:00", "2024-02-29_01:00:00"));
     assert(check_next("0 0 1 31W * ?",          "2022-02-28_00:00:00", "2022-03-31_01:00:00"));
     assert(check_next("0 0 1 31W * ?",          "2022-06-17_00:00:00", "2022-07-29_01:00:00"));
     assert(check_next("0 0 1 31W * ?",          "2022-07-30_00:00:00", "2022-08-31_01:00:00"));
@@ -425,6 +426,7 @@ void test_expr() {
     assert(check_next("0 0 1 LW * ?",           "2022-10-01_00:00:00", "2022-10-31_01:00:00"));
     assert(check_next("0 0 1 LW * ?",           "2022-07-31_00:00:00", "2022-08-31_01:00:00"));
     assert(check_next("0 0 1 LW * ?",           "2022-07-30_00:00:00", "2022-08-31_01:00:00"));
+    assert(check_next("0 0 1 LW,L-3 * ?",           "2022-07-30_00:00:00", "2022-08-31_01:00:00"));
     cron_init_hash(7);
     assert(check_next("H 0 H LW * ?",           "2022-10-01_00:00:00", "2022-10-31_14:00:00"));
     assert(check_next("0 0 1 L * ?",            "2022-05-12_00:00:00", "2022-05-31_01:00:00"));
@@ -526,6 +528,9 @@ void test_parse() {
     assert(check_same("0 0 15 1,16,L * *", "0 0 15 1,L,16 * *"));
     assert(check_expr_valid("0 0 15 1,16,L * *"));
     assert(check_expr_valid("0 0 15 1,L,16 * *"));
+    assert(check_expr_valid("0 0 12 LW,L * *"));
+    assert(check_expr_valid("0 0 12 LW,L-3,L * *"));
+    assert(check_expr_valid("0 0 12 L-3,LW,L * *"));
     // check default hash func has valid output
     cron_init_custom_hash_fn(NULL);
     assert(check_expr_valid("0 0 1 * * ?"));
