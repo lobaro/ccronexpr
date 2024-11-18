@@ -63,6 +63,10 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+**2024-11-18**
+
+* `W` allowed with ranges or iterators in OTHER list fields
+
 **2024-10-25**
 
 * `L` allowed multiple times in day-of-month (DOM) and day-of-week (DOW): Can be used in lists, additionally in DOM alongside W values such as `LW` or `10W`, but not `L-3W`

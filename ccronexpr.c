@@ -1586,16 +1586,8 @@ static char *w_check(char *field, cron_expr *target, const char **error) {
     }
     memset(newField, 0, sizeof(char) * strlen(field));
     char *tracking = newField;
-    // Ensure only 1 day is specified, and W day is not the last in a range or list or iterator of days
-    if (has_char(field, '/') || has_char(field, '-')) {
-        *error = "W not allowed in iterators or ranges in 'day of month' field";
-        goto return_error;
-    }
     // Ensure no specific days are set in day of week
-    if ((target->days_of_week[0] ^ 0x7f) != 0) {
-        *error = "Cannot set specific days of week when using 'W' in days of month.";
-        goto return_error;
-    }
+    // Already checked in cron_parse_expr
     splitField = split_str(field, ',', &len_out);
     if (!splitField) {
         *error = "Error splitting 'day of month' field for W detection";
@@ -1603,6 +1595,11 @@ static char *w_check(char *field, cron_expr *target, const char **error) {
     }
     for (size_t i = 0; i < len_out; i++) {
         if ((has_w = strchr(splitField[i], 'W'))) {
+            // Ensure W day is not the end or beginning of a range or iterator
+            if (has_char(splitField[i], '/') || has_char(splitField[i], '-')) {
+                *error = "W not allowed in iterators or ranges in 'day of month' field";
+                goto return_error;
+            }
             // Ensure nothing follows 'W'
             if (*(has_w + 1) != '\0') {
                 *error = "If W is used, 'day of month' element needs to end with it";
