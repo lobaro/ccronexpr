@@ -63,6 +63,11 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+**2024-10-25**
+
+* `L` allowed multiple times in day-of-month (DOM) and day-of-week (DOW): Can be used in lists, additionally in DOM alongside W values such as `LW` or `10W`, but not `L-3W`
+* `L` with offset possible in DOW (L-*x*) -> Sets day *x* days before Sunday
+
 **2022-11-22**
 
  * `W` allowed multiple times for day-of-month (DOM): Multiple days with a `W` flag can now be used simultaneously, also together with `LW`.
