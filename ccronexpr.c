@@ -618,20 +618,20 @@ find_next_day(struct tm *calendar, const uint8_t *cron_dom, unsigned int day_of_
     // Copy cron_dom to add days determined by L- and W- flags
     uint8_t cur_doms[4];
     memcpy(cur_doms, cron_dom, 4);
+    // Copy calendar to move day independently searching for L/W-Days; timezone MUST not be touched
+    // find_{L,W}_days() will not alter the original tm struct
+    struct tm searcher;
     if (lw_flags) {
-        // Copy calendar to move day independently searching for L/W-Days; timezone MUST not be touched
-        // find_{L,W}_days() will not alter the tm struct
-        struct tm searcher;
         memcpy(&searcher, calendar, sizeof searcher);
         // Add L days and W days of current month to cur_doms
         find_l_days(&searcher, cur_doms, l_dow_flags, l_dom_offset, lw_flags, res_out);
         if (*res_out) {
-            // something went wrong; return 0
+            // something went wrong; keep res_out value, return 0
             return 0;
         }
         find_w_days(&searcher, cur_doms, w_flags, res_out);
         if (*res_out) {
-            // something went wrong; return 0
+            // something went wrong; keep res_out value, return 0
             return 0;
         }
         // Get last day of current month: 0th day of next month
